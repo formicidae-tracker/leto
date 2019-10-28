@@ -66,6 +66,11 @@ func (cmd *FFMpegCommand) Wait() error {
 	return cmd.ecmd.Wait()
 }
 
+type FrameCorrespondance struct {
+	TrackingFrameID int64
+	StreamFrameID   int64
+}
+
 type StreamManager struct {
 	mx sync.Mutex
 	wg sync.WaitGroup
@@ -81,6 +86,7 @@ type StreamManager struct {
 	encodeCmd, streamCmd, saveCmd *FFMpegCommand
 
 	frameCorrespondance *os.File
+	correspondanceChan  chan FrameCorrespondance
 
 	host string
 
@@ -97,20 +103,21 @@ type StreamManager struct {
 
 func NewStreamManager(basedir string, fps float64, config leto.StreamConfiguration) (*StreamManager, error) {
 	res := &StreamManager{
-		baseMovieName:     filepath.Join(basedir, "stream.mp4"),
-		baseFrameMatching: filepath.Join(basedir, "stream.frame-matching.txt"),
-		encodeLogBase:     filepath.Join(basedir, "encoding.log"),
-		streamLogBase:     filepath.Join(basedir, "streaming.log"),
-		saveLogBase:       filepath.Join(basedir, "save.log"),
-		fps:               fps,
-		bitrate:           *config.BitRateKB,
-		maxBitrate:        int(float64(*config.BitRateKB) * *config.BitRateMaxRatio),
-		destAddress:       *config.Host,
-		resolution:        "",
-		quality:           *config.Quality,
-		tune:              *config.Tune,
-		period:            2 * time.Hour,
-		logger:            log.New(os.Stderr, "[stream] ", log.LstdFlags),
+		baseMovieName:      filepath.Join(basedir, "stream.mp4"),
+		baseFrameMatching:  filepath.Join(basedir, "stream.frame-matching.txt"),
+		encodeLogBase:      filepath.Join(basedir, "encoding.log"),
+		streamLogBase:      filepath.Join(basedir, "streaming.log"),
+		saveLogBase:        filepath.Join(basedir, "save.log"),
+		fps:                fps,
+		bitrate:            *config.BitRateKB,
+		maxBitrate:         int(float64(*config.BitRateKB) * *config.BitRateMaxRatio),
+		destAddress:        *config.Host,
+		resolution:         "",
+		quality:            *config.Quality,
+		tune:               *config.Tune,
+		period:             2 * time.Hour,
+		logger:             log.New(os.Stderr, "[stream] ", log.LstdFlags),
+		correspondanceChan: make(chan FrameCorrespondance, 90),
 	}
 	if err := res.Check(); err != nil {
 		return nil, err
@@ -323,9 +330,16 @@ func (s *StreamManager) stopTasks() {
 	s.encodeCmd.Stop()
 }
 
+func (s *StreamManager) Correspondances() <-chan FrameCorrespondance {
+	return s.correspondanceChan
+}
+
 func (s *StreamManager) EncodeAndStreamMuxedStream(muxed io.Reader) {
 	s.wg.Add(1)
+
 	defer s.wg.Done()
+	defer close(s.correspondanceChan)
+
 	header := make([]byte, 3*8)
 	var err error
 	s.host, err = os.Hostname()
@@ -381,6 +395,10 @@ func (s *StreamManager) EncodeAndStreamMuxedStream(muxed io.Reader) {
 		s.mx.Unlock()
 
 		fmt.Fprintf(s.frameCorrespondance, "%d %d\n", currentFrame, actual)
+		select {
+		case s.correspondanceChan <- FrameCorrespondance{StreamFrameID: int64(currentFrame), TrackingFrameID: int64(actual)}:
+		default:
+		}
 		_, err = io.CopyN(s.encodeCmd.Stdin(), muxed, int64(3*width*height))
 		if err != nil {
 			s.logger.Printf("cannot copy frame: %s", err)

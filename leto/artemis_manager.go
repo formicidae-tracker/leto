@@ -17,13 +17,14 @@ import (
 )
 
 type ArtemisManager struct {
-	incoming, merged, file, broadcast chan *hermes.FrameReadout
-	mx                                sync.Mutex
-	wg, artemisWg                     sync.WaitGroup
-	quitEncode                        chan struct{}
-	fileWriter                        *FrameReadoutFileWriter
-	trackers                          *RemoteManager
-	isMaster                          bool
+	incoming      chan *hermes.FrameReadout
+	mx            sync.Mutex
+	wg, artemisWg sync.WaitGroup
+	quitEncode    chan struct{}
+	fileWriter    *FrameReadoutFileWriter
+	trackers      *RemoteManager
+
+	isMaster bool
 
 	artemisCmd    *exec.Cmd
 	artemisOut    *io.PipeWriter
@@ -77,7 +78,6 @@ func (m *ArtemisManager) ExperimentDir(expname string) (string, error) {
 	basedir, _, err := FilenameWithoutOverwrite(basename)
 	return basedir, err
 }
-
 func (*ArtemisManager) LinkHostname(address string) error {
 	return fmt.Errorf("Work balancing with multiple host is not yet implemented")
 }
@@ -133,9 +133,10 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 	}
 
 	m.incoming = make(chan *hermes.FrameReadout, 10)
-	m.merged = make(chan *hermes.FrameReadout, 10)
-	m.file = make(chan *hermes.FrameReadout, 200)
-	m.broadcast = make(chan *hermes.FrameReadout, 10)
+	merged := make(chan *hermes.FrameReadout, 10)
+	file := make(chan *hermes.FrameReadout, 200)
+	broadcast := make(chan *hermes.FrameReadout, 10)
+	streamed := make(chan *hermes.FrameReadout, 200)
 	var err error
 	m.experimentDir, err = m.ExperimentDir(config.ExperimentName)
 	if err != nil {
@@ -166,24 +167,23 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 		IDsByUUID: map[string][]bool{"foo": []bool{true}},
 	}
 	m.wg.Add(1)
-	go func() {
-		for i := range m.merged {
-			select {
-			case m.file <- i:
-			default:
-			}
-			select {
-			case m.broadcast <- i:
-			default:
+	go func(fanOutChans []chan<- *hermes.FrameReadout) {
+		for i := range merged {
+			for _, c := range fanOutChans {
+				select {
+				case c <- i:
+				default:
+				}
 			}
 		}
-		close(m.file)
-		close(m.broadcast)
+		for _, c := range fanOutChans {
+			close(c)
+		}
 		m.wg.Done()
-	}()
+	}([]chan<- *hermes.FrameReadout{file, broadcast, streamed})
 	m.wg.Add(1)
 	go func() {
-		MergeFrameReadout(wb, m.incoming, m.merged)
+		MergeFrameReadout(wb, m.incoming, merged)
 		m.wg.Done()
 	}()
 	m.wg.Add(1)
@@ -203,13 +203,13 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 	m.wg.Add(1)
 	go func() {
 		BroadcastFrameReadout(fmt.Sprintf(":%d", leto.ARTEMIS_OUT_PORT),
-			m.broadcast,
+			broadcast,
 			3*time.Duration(1.0e6/(*config.Camera.FPS))*time.Microsecond)
 		m.wg.Done()
 	}()
 	m.wg.Add(1)
 	go func() {
-		m.fileWriter.WriteAll(m.file)
+		m.fileWriter.WriteAll(file)
 		m.wg.Done()
 	}()
 
@@ -243,6 +243,13 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 			return err
 		}
 		go m.streamManager.EncodeAndStreamMuxedStream(m.streamIn)
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			BroadCastStreanSynchronizedFrameReadout(fmt.Sprintf(":%d", leto.STREAM_OUT_PORT),
+				streamed,
+				m.streamManager.Correspondances())
+		}()
 	} else {
 		m.artemisCmd.Stdout = nil
 	}
@@ -285,9 +292,6 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 		}
 
 		m.incoming = nil
-		m.merged = nil
-		m.file = nil
-		m.broadcast = nil
 		m.logger.Printf("Experiment '%s' done", m.experimentName)
 
 		if m.testMode == true {
