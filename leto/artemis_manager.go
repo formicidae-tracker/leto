@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -224,6 +226,16 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 	m.artemisCmd.Stderr = nil
 	m.artemisCmd.Args = append(m.artemisCmd.Args, "--log-output-dir", m.experimentDir)
 	m.artemisCmd.Stdin = nil
+
+	tags := make([]string, 0, len(*config.Highlights))
+	for _, id := range *config.Highlights {
+		tags = append(tags, strconv.Itoa(id))
+	}
+
+	if len(tags) != 0 {
+		m.artemisCmd.Args = append(m.artemisCmd.Args, "--highlight-tags", strings.Join(tags, ","))
+	}
+
 	if *config.DisplayOnHost == true {
 		m.artemisCmd.Args = append(m.artemisCmd.Args, "-d", "--draw-detection")
 	}
@@ -327,6 +339,11 @@ func (m *ArtemisManager) Stop() error {
 
 func (m *ArtemisManager) TrackingMasterTrackingCommand(hostname string, port int, UUID string, camera leto.CameraConfiguration, detection leto.TagDetectionConfiguration, legacyMode bool) *exec.Cmd {
 	args := []string{}
+
+	if len(*camera.StubPath) != 0 {
+		args = append(args, "--stub-image-path", *camera.StubPath)
+	}
+
 	if m.testMode == true {
 		args = append(args, "--test-mode")
 	}

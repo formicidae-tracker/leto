@@ -59,7 +59,11 @@ func (s *ConfigurationSuite) TestYAMLParsing(c *C) {
 
 	expected := RecommendedTrackingConfiguration()
 	expected.ExperimentName = "test-configuration"
+	expected.Highlights = &([]int{1, 42, 16})
 	*expected.Detection.Quad.CriticalRadian = 0.17453
+
+	*expected.Camera.StubPath = "foo.png"
+
 	txt := `
 experiment: test-configuration
 legacy-mode: false
@@ -76,6 +80,7 @@ camera:
   fps: 8.0
   strobe-delay: 0us
   strobe-duration: 1500us
+  stub-path: foo.png
 apriltag:
   family: 36h11
   quad:
@@ -88,6 +93,10 @@ apriltag:
     max-line-mean-square-error: 10
     min-black-white-diff: 50
     deglitch: false
+highlights:
+  - 1
+  - 42
+  - 16
 `
 
 	result := &TrackingConfiguration{}
