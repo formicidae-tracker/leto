@@ -411,7 +411,7 @@ func (s *StreamManager) encodeCommandArgs() []string {
 		"-video_size", s.resolution,
 		"-framerate", fmt.Sprintf("%f", s.fps),
 		"-i", "-",
-		"-c:v:0", "libx264",
+		"-c:v:0", "h264_nvenc",
 		"-g", fmt.Sprintf("%d", int(2*s.fps)),
 		"-keyint_min", fmt.Sprintf("%d", int(s.fps)),
 		"-b:v", vbr,
