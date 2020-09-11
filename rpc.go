@@ -13,8 +13,7 @@ type Status struct {
 	Running        bool
 	Since          time.Time
 	ExperimentName string
-	Slaves         []string
-	Master         string
+	Configuration  TrackingConfiguration
 }
 
 func (r Response) ToError() error {

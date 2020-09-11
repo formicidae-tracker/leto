@@ -28,7 +28,8 @@ type ArtemisManager struct {
 	quitEncode                        chan struct{}
 	fileWriter                        *FrameReadoutFileWriter
 	trackers                          *RemoteManager
-	nodeConfig                        NodeConfiguration
+	isMaster                          bool
+	config                            *leto.TrackingConfiguration
 
 	artemisCmd    *exec.Cmd
 	artemisOut    *io.PipeWriter
@@ -41,6 +42,9 @@ type ArtemisManager struct {
 
 	experimentName string
 	since          time.Time
+
+	workloadBalance   *WorkloadBalance
+	artemisCommandLog io.WriteCloser
 }
 
 func CheckArtemisVersion(actual, minimal string) error {
@@ -103,15 +107,20 @@ func CheckFirmwareVariant(c NodeConfiguration, variant string, checkMaster bool)
 	return nil
 }
 
-func getAndCheckFirmwareVariant(c NodeConfiguration, checkMaster bool) error {
+func getAndCheckFirmwareVariant() (bool, error) {
 	variant, err := getFirmwareVariant()
 	if err != nil {
-		if c.IsMaster() && checkMaster == false {
-			return nil
-		}
-		return err
+		return false, err
 	}
-	return CheckFirmwareVariant(c, variant, checkMaster)
+
+	switch variant {
+	case "1-camera":
+		return true, nil
+	case "1-df-camera":
+		return false, nil
+	}
+
+	return false, fmt.Errorf("Unknown firmware variant '%s'", variant)
 }
 
 func NewArtemisManager() (*ArtemisManager, error) {
@@ -133,16 +142,14 @@ func NewArtemisManager() (*ArtemisManager, error) {
 		return nil, fmt.Errorf("Could not find ffmpeg: %s", err)
 	}
 
-	nodeConfig := GetNodeConfiguration()
-
-	err = getAndCheckFirmwareVariant(nodeConfig, false)
+	isMaster, err := getAndCheckFirmwareVariant()
 	if err != nil {
 		return nil, err
 	}
 
 	return &ArtemisManager{
-		nodeConfig: nodeConfig,
-		logger:     log.New(os.Stderr, "[artemis] ", log.LstdFlags),
+		isMaster: isMaster,
+		logger:   log.New(os.Stderr, "[artemis] ", log.LstdFlags),
 	}, nil
 }
 
@@ -166,60 +173,6 @@ func (m *ArtemisManager) ExperimentDir(expname string) (string, error) {
 	return basedir, err
 }
 
-func (m *ArtemisManager) SetMaster(hostname string) (err error) {
-	defer func() {
-		if err == nil {
-			m.nodeConfig.Save()
-		}
-	}()
-
-	if len(hostname) == 0 {
-		m.nodeConfig.Master = ""
-		return
-	}
-
-	if len(m.nodeConfig.Slaves) != 0 {
-		err = fmt.Errorf("Cannot set node as slave as it has its own slaves (%s)", m.nodeConfig.Slaves)
-		return
-	}
-	m.nodeConfig.Master = hostname
-	err = getAndCheckFirmwareVariant(m.nodeConfig, true)
-	if err != nil {
-		m.nodeConfig.Master = ""
-	}
-	return
-}
-
-func (m *ArtemisManager) AddSlave(hostname string) (err error) {
-	defer func() {
-		if err == nil {
-			m.nodeConfig.Save()
-		}
-	}()
-
-	err = m.SetMaster("")
-	if err != nil {
-		return
-	}
-	err = getAndCheckFirmwareVariant(m.nodeConfig, true)
-	if err != nil {
-		return
-	}
-
-	err = m.nodeConfig.AddSlave(hostname)
-	return
-}
-
-func (m *ArtemisManager) RemoveSlave(hostname string) (err error) {
-	defer func() {
-		if err == nil {
-			m.nodeConfig.Save()
-		}
-	}()
-
-	return m.nodeConfig.RemoveSlave(hostname)
-}
-
 func (m *ArtemisManager) LoadDefaultConfig() *leto.TrackingConfiguration {
 	res := leto.RecommendedTrackingConfiguration()
 	systemConfig, err := leto.ReadConfiguration("/etc/default/leto.yml")
@@ -238,15 +191,15 @@ func (m *ArtemisManager) LoadDefaultConfig() *leto.TrackingConfiguration {
 	return &res
 }
 
-func GenerateLoadBalancing(c NodeConfiguration) *leto.LoadBalancing {
+func GenerateLoadBalancing(c NodeConfiguration) *leto.LoadBalancingConfiguration {
 	if len(c.Slaves) == 0 {
-		return &leto.LoadBalancing{
+		return &leto.LoadBalancingConfiguration{
 			SelfUUID:     "single-node",
 			UUIDs:        map[string]string{"localhost": "single-node"},
 			Assignements: map[int]string{0: "single-node"},
 		}
 	}
-	res := &leto.LoadBalancing{
+	res := &leto.LoadBalancingConfiguration{
 		SelfUUID:     uuid.New().String(),
 		UUIDs:        make(map[string]string),
 		Assignements: make(map[int]string),
@@ -261,10 +214,10 @@ func GenerateLoadBalancing(c NodeConfiguration) *leto.LoadBalancing {
 	return res
 }
 
-func BuildWorkloadBalance(lb *leto.LoadBalancing, FPS float64) *WorkloadBalance {
+func BuildWorkloadBalance(lb *leto.LoadBalancingConfiguration, FPS float64) *WorkloadBalance {
 	wb := &WorkloadBalance{
 		FPS:        FPS,
-		MasterUUID: lb.UUIDs["localhost"],
+		MasterUUID: lb.UUIDs[lb.Master],
 		Stride:     len(lb.Assignements),
 		IDsByUUID:  make(map[string][]bool),
 	}
@@ -279,180 +232,213 @@ func BuildWorkloadBalance(lb *leto.LoadBalancing, FPS float64) *WorkloadBalance 
 	return wb
 }
 
-func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
-	if m.incoming != nil {
-		return fmt.Errorf("ArtemisManager: Start: already started")
+func (m *ArtemisManager) IsRunning() bool {
+	return m.incoming != nil
+}
+
+func (m *ArtemisManager) InsertResolutionInConfig() error {
+	if m.isMaster == false {
+		return nil
+	}
+	// test if there is only a single node and it is the master (therefore us)!!!
+	_, ok := m.config.Loads.UUIDs[m.config.Loads.Master]
+	if len(m.config.Loads.UUIDs) == 1 && ok == true {
+		return nil
 	}
 
-	config := m.LoadDefaultConfig()
+	cmd := exec.Command("artemis", "--fetch-resolution")
 
-	if err := config.Merge(userConfig); err != nil {
-		return fmt.Errorf("could not merge user configuration: %s", err)
+	if m.config.Camera.StubPath != nil || len(*m.config.Camera.StubPath) > 0 {
+		cmd.Args = append(cmd.Args, "--stub-image-path", *m.config.Camera.StubPath)
 	}
 
-	if m.nodeConfig.IsMaster() == true {
-		config.Loads = GenerateLoadBalancing(m.nodeConfig)
-		if len(m.nodeConfig.Slaves) > 0 {
-			cmd := exec.Command("artemis", "--fetch-resolution")
-
-			if config.Camera.StubPath != nil || len(*config.Camera.StubPath) > 0 {
-				cmd.Args = append(cmd.Args, "--stub-image-path", *config.Camera.StubPath)
-			}
-
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				return fmt.Errorf("Could not determine camera resolution: %s", err)
-			}
-			_, err = fmt.Sscanf(string(out), "%d %d", &config.Loads.Width, &config.Loads.Height)
-			if err != nil {
-				return fmt.Errorf("Could not parse camera resolution in '%s'", out)
-			}
-		}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Could not determine camera resolution: %s", err)
+	}
+	_, err = fmt.Sscanf(string(out), "%d %d", &m.config.Loads.Width, &m.config.Loads.Height)
+	if err != nil {
+		return fmt.Errorf("Could not parse camera resolution in '%s'", out)
 	}
 
-	if err := config.CheckAllFieldAreSet(); err != nil {
-		return fmt.Errorf("incomplete configuration: %s", err)
-	}
+	return nil
+}
 
+func (m *ArtemisManager) SetUpTestMode() {
 	m.testMode = false
-	if len(config.ExperimentName) == 0 {
+	if len(m.config.ExperimentName) == 0 {
 		m.logger.Printf("Starting in test mode")
 		m.testMode = true
-		// enforces display
-		*config.DisplayOnHost = true
-		config.ExperimentName = "TEST-MODE"
+		m.config.ExperimentName = "TEST-MODE"
 	} else {
-		m.logger.Printf("New experiment '%s'", config.ExperimentName)
+		m.logger.Printf("New experiment '%s'", m.config.ExperimentName)
 	}
+}
 
+func (m *ArtemisManager) SetUpChannels() {
 	m.incoming = make(chan *hermes.FrameReadout, 10)
 
-	if m.nodeConfig.IsMaster() == true {
-		m.merged = make(chan *hermes.FrameReadout, 10)
-		m.file = make(chan *hermes.FrameReadout, 200)
-		m.broadcast = make(chan *hermes.FrameReadout, 10)
+	if m.isMaster == false {
+		return
 	}
 
+	m.merged = make(chan *hermes.FrameReadout, 10)
+	m.file = make(chan *hermes.FrameReadout, 200)
+	m.broadcast = make(chan *hermes.FrameReadout, 10)
+}
+
+func (m *ArtemisManager) SetUpExperimentDir() error {
 	var err error
-	m.experimentDir, err = m.ExperimentDir(config.ExperimentName)
+	m.experimentDir, err = m.ExperimentDir(m.config.ExperimentName)
 	if err != nil {
 		return err
 	}
-	err = os.MkdirAll(m.experimentDir, 0755)
-	if err != nil {
-		return err
-	}
+	return os.MkdirAll(m.experimentDir, 0755)
+}
 
+func (m *ArtemisManager) SaveConfiguration() error {
 	//save the config to the experiment dir
 	confSaveName := filepath.Join(m.experimentDir, "leto-final-config.yml")
-	err = config.WriteConfiguration(confSaveName)
+	return m.config.WriteToFile(confSaveName)
+}
+
+func (m *ArtemisManager) SetUpFrameReadoutWriter() error {
+	if m.isMaster == false {
+		return nil
+	}
+	var err error
+	m.fileWriter, err = NewFrameReadoutWriter(filepath.Join(m.experimentDir, "tracking.hermes"))
+	return err
+}
+
+func (m *ArtemisManager) SetUpRemoteManager() {
+	if m.isMaster == false {
+		return
+	}
+
+	m.trackers = NewRemoteManager()
+
+}
+
+func (m *ArtemisManager) SpawnFrameReadoutDispatchTask() {
+	if m.isMaster == false {
+		return
+	}
+
+	m.wg.Add(1)
+	go func() {
+		for i := range m.merged {
+			select {
+			case m.file <- i:
+			default:
+			}
+			select {
+			case m.broadcast <- i:
+			default:
+			}
+		}
+		close(m.file)
+		close(m.broadcast)
+		m.wg.Done()
+	}()
+}
+
+func (m *ArtemisManager) SpawnFrameReadoutMergeTask() {
+	if m.isMaster == false {
+		return
+	}
+
+	m.wg.Add(1)
+	go func() {
+		MergeFrameReadout(m.workloadBalance, m.incoming, m.merged)
+		m.wg.Done()
+	}()
+}
+
+func (m *ArtemisManager) SpawnListenTrackerTask() {
+	if m.isMaster == false {
+		return
+	}
+
+	m.wg.Add(1)
+	go func() {
+		err := m.trackers.Listen(fmt.Sprintf(":%d", leto.ARTEMIS_IN_PORT), m.OnAcceptTracker(), func() {
+			m.logger.Printf("All connection closed, cleaning up experiment")
+			close(m.incoming)
+			m.mx.Lock()
+			defer m.mx.Unlock()
+			m.incoming = nil
+		})
+		if err != nil {
+			m.logger.Printf("listening for tracker unhandled error: %s", err)
+		}
+		m.wg.Done()
+	}()
+}
+
+func (m *ArtemisManager) SpawnBroadcastTask() {
+	if m.isMaster == false {
+		return
+	}
+	m.wg.Add(1)
+	go func() {
+		BroadcastFrameReadout(fmt.Sprintf(":%d", leto.ARTEMIS_OUT_PORT),
+			m.broadcast,
+			3*time.Duration(1.0e6/(*m.config.Camera.FPS))*time.Microsecond)
+		m.wg.Done()
+	}()
+}
+
+func (m *ArtemisManager) SpawnWriteFileTask() {
+	if m.isMaster == false {
+		return
+	}
+	m.wg.Add(1)
+	go func() {
+		m.fileWriter.WriteAll(m.file)
+		m.wg.Done()
+	}()
+}
+
+func (m *ArtemisManager) SpawnLocalSubTasks() {
+	m.SpawnFrameReadoutDispatchTask()
+	m.SpawnFrameReadoutMergeTask()
+	m.SpawnListenTrackerTask()
+	m.SpawnBroadcastTask()
+	m.SpawnWriteFileTask()
+}
+
+func (m *ArtemisManager) SetupArtemisCommand() error {
+	m.artemisCmd = m.TrackingCommand(m.config, m.workloadBalance)
+	var err error
+	m.artemisCmd.Stderr, err = os.Create(filepath.Join(m.experimentDir, "artemis.stderr"))
 	if err != nil {
 		return err
 	}
-
-	wb := BuildWorkloadBalance(config.Loads, *config.Camera.FPS)
-
-	if m.nodeConfig.IsMaster() == true {
-		m.fileWriter, err = NewFrameReadoutWriter(filepath.Join(m.experimentDir, "tracking.hermes"))
-		if err != nil {
-			return err
-		}
-
-		m.trackers = NewRemoteManager()
-
-		m.wg.Add(1)
-		go func() {
-			for i := range m.merged {
-				select {
-				case m.file <- i:
-				default:
-				}
-				select {
-				case m.broadcast <- i:
-				default:
-				}
-			}
-			close(m.file)
-			close(m.broadcast)
-			m.wg.Done()
-		}()
-
-		m.wg.Add(1)
-		go func() {
-			MergeFrameReadout(wb, m.incoming, m.merged)
-			m.wg.Done()
-		}()
-
-		m.wg.Add(1)
-		go func() {
-			err := m.trackers.Listen(fmt.Sprintf(":%d", leto.ARTEMIS_IN_PORT), m.OnAccept(), func() {
-				m.logger.Printf("All connection closed, cleaning up experiment")
-				close(m.incoming)
-				m.mx.Lock()
-				defer m.mx.Unlock()
-				m.incoming = nil
-			})
-			if err != nil {
-				m.logger.Printf("listening for tracker unhandled error: %s", err)
-			}
-			m.wg.Done()
-		}()
-		m.wg.Add(1)
-		go func() {
-			BroadcastFrameReadout(fmt.Sprintf(":%d", leto.ARTEMIS_OUT_PORT),
-				m.broadcast,
-				3*time.Duration(1.0e6/(*config.Camera.FPS))*time.Microsecond)
-			m.wg.Done()
-		}()
-		m.wg.Add(1)
-		go func() {
-			m.fileWriter.WriteAll(m.file)
-			m.wg.Done()
-		}()
-	}
-
-	logFilePath := filepath.Join(m.experimentDir, "artemis.command")
-	artemisCommandLog, err := os.Create(logFilePath)
-	if err != nil {
-		return fmt.Errorf("Could not create artemis log file ('%s'): %s", logFilePath, err)
-	}
-	defer artemisCommandLog.Close()
-
-	targetHost := "localhost"
-	if m.nodeConfig.IsMaster() == false {
-		targetHost = strings.TrimPrefix(m.nodeConfig.Master, "leto.") + ".local"
-	}
-	m.artemisCmd = m.TrackingCommand(targetHost, leto.ARTEMIS_IN_PORT, config.Loads.SelfUUID, config.Camera, config.Detection, *config.LegacyMode, wb)
-	m.artemisCmd.Stderr, err = os.Create(filepath.Join(m.experimentDir, "artemis.stderr"))
-	m.artemisCmd.Args = append(m.artemisCmd.Args, "--log-output-dir", m.experimentDir)
 	m.artemisCmd.Stdin = nil
+	return nil
+}
 
-	tags := make([]string, 0, len(*config.Highlights))
-	for _, id := range *config.Highlights {
-		tags = append(tags, "0x"+strconv.FormatUint(uint64(id), 16))
-	}
+func (m *ArtemisManager) AntOutputDir() string {
+	return filepath.Join(m.experimentDir, "ants")
+}
 
-	if len(tags) != 0 {
-		m.artemisCmd.Args = append(m.artemisCmd.Args, "--highlight-tags", strings.Join(tags, ","))
+func (m *ArtemisManager) SetUpAntOutputDir() error {
+	if m.isMaster == false {
+		return nil
 	}
+	return os.MkdirAll(m.AntOutputDir(), 0755)
+}
 
-	if *config.DisplayOnHost == true {
-		m.artemisCmd.Args = append(m.artemisCmd.Args, "-d", "--draw-detection")
-	}
-	if m.nodeConfig.IsMaster() == true {
-		dirname := filepath.Join(m.experimentDir, "ants")
-		err = os.MkdirAll(dirname, 0755)
-		if err != nil {
-			return err
-		}
-		m.artemisCmd.Args = append(m.artemisCmd.Args, "--new-ant-output-dir", dirname,
-			"--new-ant-roi-size", fmt.Sprintf("%d", *config.NewAntOutputROISize),
-			"--ant-renew-period-hour", fmt.Sprintf("%f", config.NewAntRenewPeriod.Hours()))
+func (m *ArtemisManager) SetUpStreamManager() error {
+	if m.isMaster == true {
+		m.artemisCmd.Args = append(m.artemisCmd.Args, "--new-ant-output-dir", m.AntOutputDir(),
+			"--new-ant-roi-size", fmt.Sprintf("%d", *m.config.NewAntOutputROISize),
+			"--ant-renew-period-hour", fmt.Sprintf("%f", m.config.NewAntRenewPeriod.Hours()))
 		m.streamIn, m.artemisOut = io.Pipe()
 		m.artemisCmd.Stdout = m.artemisOut
-		m.streamManager, err = NewStreamManager(m.experimentDir, *config.Camera.FPS/float64(wb.Stride), config.Stream)
+		var err error
+		m.streamManager, err = NewStreamManager(m.experimentDir, *m.config.Camera.FPS/float64(m.workloadBalance.Stride), m.config.Stream)
 		if err != nil {
 			return err
 		}
@@ -460,31 +446,47 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 	} else {
 		m.artemisCmd.Stdout = nil
 		m.artemisCmd.Args = append(m.artemisCmd.Args,
-			"--camera-slave-width", fmt.Sprintf("%d", config.Loads.Width),
-			"--camera-slave-height", fmt.Sprintf("%d", config.Loads.Height))
+			"--camera-slave-width", fmt.Sprintf("%d", m.config.Loads.Width),
+			"--camera-slave-height", fmt.Sprintf("%d", m.config.Loads.Height))
+	}
+	return nil
+}
+
+func (m *ArtemisManager) SetUpArtemisCommandLog() (io.WriteCloser, error) {
+	logCommandPath := filepath.Join(m.experimentDir, "artemis.command")
+	artemisCommandLog, err := os.Create(logCommandPath)
+	if err != nil {
+		return nil, fmt.Errorf("Could not create artemis log file ('%s'): %s", logCommandPath, err)
+	}
+	return artemisCommandLog, nil
+}
+
+func (m *ArtemisManager) SpawnSlaves() {
+	if m.isMaster == false {
+		return
 	}
 
-	m.logger.Printf("Starting tracking for '%s'", config.ExperimentName)
-	m.experimentName = config.ExperimentName
-	m.since = time.Now()
-	fmt.Fprintf(artemisCommandLog, "%s %s\n", m.artemisCmd.Path, m.artemisCmd.Args)
-
-	if m.nodeConfig.IsMaster() {
-		//Starts all slaves
-		for _, s := range m.nodeConfig.Slaves {
-			slaveConfig := *config
-			slaveConfig.Loads.SelfUUID = slaveConfig.Loads.UUIDs[s]
-			resp := leto.Response{}
-			_, _, err := leto.RunForHost(s, "Leto.StartTracking", &slaveConfig, &resp)
-			if err == nil {
-				err = resp.ToError()
-			}
-			if err != nil {
-				m.logger.Printf("Could not start slave %s: %s", s, err)
-			}
+	for slaveName, UUID := range m.config.Loads.UUIDs {
+		slaveConfig := *m.config
+		slaveConfig.Loads.SelfUUID = UUID
+		resp := leto.Response{}
+		_, _, err := leto.RunForHost(slaveName, "Leto.StartTracking", &slaveConfig, &resp)
+		if err == nil {
+			err = resp.ToError()
+		}
+		if err != nil {
+			m.logger.Printf("Could not start slave %s: %s", slaveName, err)
 		}
 	}
+}
 
+func (m *ArtemisManager) SpawnTracker() {
+	m.logger.Printf("Starting tracking for '%s'", m.config.ExperimentName)
+	m.experimentName = m.config.ExperimentName
+	m.since = time.Now()
+	fmt.Fprintf(m.artemisCommandLog, "%s %s\n", m.artemisCmd.Path, m.artemisCmd.Args)
+	m.artemisCommandLog.Close()
+	m.artemisCommandLog = nil
 	m.artemisWg.Add(1)
 	go func() {
 		defer m.artemisWg.Done()
@@ -522,6 +524,7 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 			m.streamIn = nil
 		}
 
+		m.config = nil
 		m.incoming = nil
 		m.merged = nil
 		m.file = nil
@@ -535,8 +538,83 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 			}
 		}
 	}()
+}
+
+func (m *ArtemisManager) SetUpExperiment(config *leto.TrackingConfiguration) error {
+	m.InsertResolutionInConfig()
+	m.config = config
+	m.workloadBalance = BuildWorkloadBalance(config.Loads, *config.Camera.FPS)
+
+	m.SetUpTestMode()
+	err := m.SetUpExperimentDir()
+	if err != nil {
+		return err
+	}
+	err = m.SaveConfiguration()
+	if err != nil {
+		return err
+	}
+	err = m.SetUpFrameReadoutWriter()
+	if err != nil {
+		return err
+	}
+	m.SetUpRemoteManager()
+	artemisCommandLog, err := m.SetUpArtemisCommandLog()
+	if err != nil {
+		return err
+	}
+	defer artemisCommandLog.Close()
+	err = m.SetUpAntOutputDir()
+	if err != nil {
+		return err
+	}
+	err = m.SetUpStreamManager()
+	if err != nil {
+		return err
+	}
+
+	//only setup channels (that indicate a running experiment) when everything is fine
+	m.SetUpChannels()
+	return nil
+}
+
+func (m *ArtemisManager) Start(config *leto.TrackingConfiguration) error {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	if m.IsRunning() == true {
+		return fmt.Errorf("ArtemisManager: Start: already started")
+	}
+	err := m.SetUpExperiment(config)
+	if err != nil {
+		return err
+	}
+
+	m.SpawnLocalSubTasks()
+
+	m.SpawnSlaves()
+
+	m.SpawnTracker()
 
 	return nil
+}
+
+func (m *ArtemisManager) StopSlaves() {
+	if m.isMaster == false {
+		return
+	}
+	for slaveName, _ := range m.config.Loads.UUIDs {
+		if slaveName == m.config.Loads.Master {
+			continue
+		}
+		resp := leto.Response{}
+		_, _, err := leto.RunForHost(slaveName, "Leto.StopTracking", &leto.TrackingStop{}, &resp)
+		if err == nil {
+			err = resp.ToError()
+		}
+		if err != nil {
+			m.logger.Printf("Could not stop slave %s: %s", slaveName, err)
+		}
+	}
 }
 
 func (m *ArtemisManager) Stop() error {
@@ -548,18 +626,7 @@ func (m *ArtemisManager) Stop() error {
 	}
 
 	if m.artemisCmd != nil {
-		if m.nodeConfig.IsMaster() == true {
-			for _, s := range m.nodeConfig.Slaves {
-				resp := leto.Response{}
-				_, _, err := leto.RunForHost(s, "Leto.StopTracking", &leto.TrackingStop{}, &resp)
-				if err == nil {
-					err = resp.ToError()
-				}
-				if err != nil {
-					m.logger.Printf("Could not stop slave %s: %s", s, err)
-				}
-			}
-		}
+		m.StopSlaves()
 
 		m.artemisCmd.Process.Signal(os.Interrupt)
 		m.logger.Printf("Waiting for artemis process to stop")
@@ -572,42 +639,47 @@ func (m *ArtemisManager) Stop() error {
 	return nil
 }
 
-func (m *ArtemisManager) TrackingCommand(hostname string, port int, UUID string, camera leto.CameraConfiguration, detection leto.TagDetectionConfiguration, legacyMode bool, wb *WorkloadBalance) *exec.Cmd {
+func (m *ArtemisManager) TrackingCommand(config *leto.TrackingConfiguration, wb *WorkloadBalance) *exec.Cmd {
+	targetHost := "localhost"
+	if m.isMaster == false {
+		targetHost = config.Loads.Master + ".local"
+	}
+
 	args := []string{}
 
-	if len(*camera.StubPath) != 0 {
-		args = append(args, "--stub-image-path", *camera.StubPath)
+	if len(*config.Camera.StubPath) != 0 {
+		args = append(args, "--stub-image-path", *m.config.Camera.StubPath)
 	}
 
 	if m.testMode == true {
 		args = append(args, "--test-mode")
 	}
-	args = append(args, "--host", hostname)
-	args = append(args, "--port", fmt.Sprintf("%d", port))
-	args = append(args, "--uuid", UUID)
+	args = append(args, "--host", targetHost)
+	args = append(args, "--port", fmt.Sprintf("%d", leto.ARTEMIS_IN_PORT))
+	args = append(args, "--uuid", config.Loads.SelfUUID)
 
-	if legacyMode == true {
+	if *config.LegacyMode == true {
 		args = append(args, "--legacy-mode")
 	}
-	args = append(args, "--camera-fps", fmt.Sprintf("%f", *camera.FPS))
-	args = append(args, "--camera-strobe-us", fmt.Sprintf("%d", camera.StrobeDuration.Nanoseconds()/1000))
-	args = append(args, "--camera-strobe-delay-us", fmt.Sprintf("%d", camera.StrobeDelay.Nanoseconds()/1000))
-	args = append(args, "--at-family", *detection.Family)
-	args = append(args, "--at-quad-decimate", fmt.Sprintf("%f", *detection.Quad.Decimate))
-	args = append(args, "--at-quad-sigma", fmt.Sprintf("%f", *detection.Quad.Sigma))
-	if *detection.Quad.RefineEdges == true {
+	args = append(args, "--camera-fps", fmt.Sprintf("%f", *config.Camera.FPS))
+	args = append(args, "--camera-strobe-us", fmt.Sprintf("%d", config.Camera.StrobeDuration.Nanoseconds()/1000))
+	args = append(args, "--camera-strobe-delay-us", fmt.Sprintf("%d", config.Camera.StrobeDelay.Nanoseconds()/1000))
+	args = append(args, "--at-family", *config.Detection.Family)
+	args = append(args, "--at-quad-decimate", fmt.Sprintf("%f", *config.Detection.Quad.Decimate))
+	args = append(args, "--at-quad-sigma", fmt.Sprintf("%f", *config.Detection.Quad.Sigma))
+	if *config.Detection.Quad.RefineEdges == true {
 		args = append(args, "--at-refine-edges")
 	}
-	args = append(args, "--at-quad-min-cluster", fmt.Sprintf("%d", *detection.Quad.MinClusterPixel))
-	args = append(args, "--at-quad-max-n-maxima", fmt.Sprintf("%d", *detection.Quad.MaxNMaxima))
-	args = append(args, "--at-quad-critical-radian", fmt.Sprintf("%f", *detection.Quad.CriticalRadian))
-	args = append(args, "--at-quad-max-line-mse", fmt.Sprintf("%f", *detection.Quad.MaxLineMSE))
-	args = append(args, "--at-quad-min-bw-diff", fmt.Sprintf("%d", *detection.Quad.MinBWDiff))
-	if *detection.Quad.Deglitch == true {
+	args = append(args, "--at-quad-min-cluster", fmt.Sprintf("%d", *config.Detection.Quad.MinClusterPixel))
+	args = append(args, "--at-quad-max-n-maxima", fmt.Sprintf("%d", *config.Detection.Quad.MaxNMaxima))
+	args = append(args, "--at-quad-critical-radian", fmt.Sprintf("%f", *config.Detection.Quad.CriticalRadian))
+	args = append(args, "--at-quad-max-line-mse", fmt.Sprintf("%f", *config.Detection.Quad.MaxLineMSE))
+	args = append(args, "--at-quad-min-bw-diff", fmt.Sprintf("%d", *config.Detection.Quad.MinBWDiff))
+	if *config.Detection.Quad.Deglitch == true {
 		args = append(args, "--at-quad-deglitch")
 	}
 
-	if m.nodeConfig.IsMaster() == true {
+	if m.isMaster == true {
 		args = append(args, "--video-to-stdout")
 		args = append(args, "--video-output-height", "1080")
 		args = append(args, "--video-output-add-header")
@@ -616,7 +688,7 @@ func (m *ArtemisManager) TrackingCommand(hostname string, port int, UUID string,
 	if len(wb.IDsByUUID) > 1 {
 		args = append(args, "--frame-stride", fmt.Sprintf("%d", len(wb.IDsByUUID)))
 		ids := []string{}
-		for i, isSet := range wb.IDsByUUID[UUID] {
+		for i, isSet := range wb.IDsByUUID[config.Loads.SelfUUID] {
 			if isSet == false {
 				continue
 			}
@@ -625,13 +697,28 @@ func (m *ArtemisManager) TrackingCommand(hostname string, port int, UUID string,
 		args = append(args, "--frame-ids", strings.Join(ids, ","))
 	}
 
+	tags := make([]string, 0, len(*config.Highlights))
+	for _, id := range *config.Highlights {
+		tags = append(tags, "0x"+strconv.FormatUint(uint64(id), 16))
+	}
+
+	if len(tags) != 0 {
+		m.artemisCmd.Args = append(m.artemisCmd.Args, "--highlight-tags", strings.Join(tags, ","))
+	}
+
+	if *config.DisplayOnHost == true {
+		args = append(args, "-d", "--draw-detection")
+	}
+
+	args = append(args, "--log-output-dir", m.experimentDir)
+
 	cmd := exec.Command("artemis", args...)
 	cmd.Stderr = nil
 	cmd.Stdin = nil
 	return cmd
 }
 
-func (m *ArtemisManager) OnAccept() func(c net.Conn) {
+func (m *ArtemisManager) OnAcceptTracker() func(c net.Conn) {
 	return func(c net.Conn) {
 		errors := make(chan error)
 		logger := log.New(os.Stderr, fmt.Sprintf("[artemis/%s] ", c.RemoteAddr().String()), log.LstdFlags)

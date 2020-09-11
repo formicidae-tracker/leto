@@ -169,24 +169,26 @@ func (from *StreamConfiguration) Merge(to *StreamConfiguration) error {
 	return MergeConfiguration(from, to)
 }
 
-type LoadBalancing struct {
-	SelfUUID      string            `yaml:"self-UUID"`
-	UUIDs         map[string]string `yaml:"UUIDs"`
-	Assignements  map[int]string    `yaml:"assignation"`
-	Width, Height int
+type LoadBalancingConfiguration struct {
+	SelfUUID     string            `yaml:"self-UUID"`
+	Master       string            `yaml:"master"`
+	UUIDs        map[string]string `yaml:"UUIDs"`
+	Assignements map[int]string    `yaml:"assignation"`
+	Width        int               `yaml:"width"`
+	Height       int               `yaml:"height"`
 }
 
 type TrackingConfiguration struct {
-	ExperimentName      string                    `short:"e" long:"experiment" description:"Name of the experiment to run" yaml:"experiment"`
-	DisplayOnHost       *bool                     `long:"display-on-host" description:"Opens a window and display on host the data" yaml:"host-display"`
-	LegacyMode          *bool                     `long:"legacy-mode" description:"Produces a legacy mode data output" yaml:"legacy-mode"`
-	NewAntOutputROISize *int                      `long:"new-ant-size" description:"Size of the image when a new ant is found (recommended:600)" yaml:"new-ant-roi"`
-	NewAntRenewPeriod   *time.Duration            `long:"new-ant-renew-period" description:"Period to renew ant snapshot (recommended:2h)" yaml:"new-ant-renew-period"`
-	Stream              StreamConfiguration       `yaml:"stream"`
-	Camera              CameraConfiguration       `yaml:"camera"`
-	Detection           TagDetectionConfiguration `yaml:"apriltag"`
-	Highlights          *[]int                    `yaml:"highlights"`
-	Loads               *LoadBalancing            `yaml:"load-balancing"`
+	ExperimentName      string                      `short:"e" long:"experiment" description:"Name of the experiment to run" yaml:"experiment"`
+	DisplayOnHost       *bool                       `long:"display-on-host" description:"Opens a window and display on host the data" yaml:"host-display"`
+	LegacyMode          *bool                       `long:"legacy-mode" description:"Produces a legacy mode data output" yaml:"legacy-mode"`
+	NewAntOutputROISize *int                        `long:"new-ant-size" description:"Size of the image when a new ant is found (recommended:600)" yaml:"new-ant-roi"`
+	NewAntRenewPeriod   *time.Duration              `long:"new-ant-renew-period" description:"Period to renew ant snapshot (recommended:2h)" yaml:"new-ant-renew-period"`
+	Stream              StreamConfiguration         `yaml:"stream"`
+	Camera              CameraConfiguration         `yaml:"camera"`
+	Detection           TagDetectionConfiguration   `yaml:"apriltag"`
+	Highlights          *[]int                      `yaml:"highlights"`
+	Loads               *LoadBalancingConfiguration `yaml:"load-balancing"`
 }
 
 func RecommendedTrackingConfiguration() TrackingConfiguration {
@@ -222,7 +224,7 @@ func (from *TrackingConfiguration) Merge(to *TrackingConfiguration) error {
 		from.ExperimentName = to.ExperimentName
 	}
 	if from.Loads == nil && to.Loads != nil {
-		from.Loads = &LoadBalancing{}
+		from.Loads = &LoadBalancingConfiguration{}
 		*from.Loads = *to.Loads
 	}
 
@@ -265,7 +267,7 @@ func ReadConfiguration(filename string) (*TrackingConfiguration, error) {
 	return res, err
 }
 
-func (c *TrackingConfiguration) WriteConfiguration(filename string) error {
+func (c *TrackingConfiguration) WriteToFile(filename string) error {
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("Could not encode configuration: %s", err)

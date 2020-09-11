@@ -34,7 +34,7 @@ var _ = Suite(&ConfigurationSuite{})
 
 func (s *ConfigurationSuite) TestHasADefaultConfiguration(c *C) {
 	config := RecommendedTrackingConfiguration()
-	config.Loads = &LoadBalancing{}
+	config.Loads = &LoadBalancingConfiguration{}
 	c.Check(config.CheckAllFieldAreSet(), IsNil)
 }
 
@@ -68,8 +68,8 @@ func (s *ConfigurationSuite) TestCanBeMerged(c *C) {
 	*to.Detection.Quad.MinBWDiff = 120
 	*expected.Detection.Quad.MinBWDiff = 120
 
-	to.Loads = &LoadBalancing{"single-node", map[string]string{"localhost": "single-node"}, map[int]string{0: "single-node"}, 640, 480}
-	expected.Loads = &LoadBalancing{"single-node", map[string]string{"localhost": "single-node"}, map[int]string{0: "single-node"}, 640, 480}
+	to.Loads = &LoadBalancingConfiguration{"single-node", "myself", map[string]string{"myself": "single-node"}, map[int]string{0: "single-node"}, 640, 480}
+	expected.Loads = &LoadBalancingConfiguration{"single-node", "myself", map[string]string{"myself": "single-node"}, map[int]string{0: "single-node"}, 640, 480}
 
 	c.Assert(from.Merge(to), IsNil)
 	c.Check(from, DeepEquals, expected)
@@ -203,10 +203,10 @@ func (s *ConfigurationSuite) TestConfigurationIO(c *C) {
 	c.Check(err, ErrorMatches, `yaml: unmarshal errors:
   line 1:.*`)
 
-	err = config.WriteConfiguration(unexistConfigPath)
+	err = config.WriteToFile(unexistConfigPath)
 	c.Check(err, IsNil)
 
-	err = config.WriteConfiguration(filepath.Join(s.testDir, "foo/bar.yml"))
+	err = config.WriteToFile(filepath.Join(s.testDir, "foo/bar.yml"))
 	c.Check(err, ErrorMatches, `Could not write '.*': open .*`)
 
 }
