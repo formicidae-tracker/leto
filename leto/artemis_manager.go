@@ -18,7 +18,6 @@ import (
 	"github.com/blang/semver"
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/leto"
-	"github.com/google/uuid"
 )
 
 type ArtemisManager struct {
@@ -171,47 +170,6 @@ func (m *ArtemisManager) ExperimentDir(expname string) (string, error) {
 	basename := filepath.Join(os.TempDir(), "fort-tests", expname)
 	basedir, _, err := FilenameWithoutOverwrite(basename)
 	return basedir, err
-}
-
-func (m *ArtemisManager) LoadDefaultConfig() *leto.TrackingConfiguration {
-	res := leto.RecommendedTrackingConfiguration()
-	systemConfig, err := leto.ReadConfiguration("/etc/default/leto.yml")
-	if err != nil {
-		m.logger.Printf("Could not load system configuration: %s", err)
-		return &res
-	}
-
-	err = res.Merge(systemConfig)
-	if err != nil {
-		m.logger.Printf("Could not merge system configuration: %s", err)
-		m.logger.Printf("Reverting to library default configuration")
-		res = leto.RecommendedTrackingConfiguration()
-	}
-
-	return &res
-}
-
-func GenerateLoadBalancing(c NodeConfiguration) *leto.LoadBalancingConfiguration {
-	if len(c.Slaves) == 0 {
-		return &leto.LoadBalancingConfiguration{
-			SelfUUID:     "single-node",
-			UUIDs:        map[string]string{"localhost": "single-node"},
-			Assignements: map[int]string{0: "single-node"},
-		}
-	}
-	res := &leto.LoadBalancingConfiguration{
-		SelfUUID:     uuid.New().String(),
-		UUIDs:        make(map[string]string),
-		Assignements: make(map[int]string),
-	}
-	res.UUIDs["localhost"] = res.SelfUUID
-	res.Assignements[0] = res.SelfUUID
-	for i, s := range c.Slaves {
-		uuid := uuid.New().String()
-		res.UUIDs[s] = uuid
-		res.Assignements[i+1] = uuid
-	}
-	return res
 }
 
 func BuildWorkloadBalance(lb *leto.LoadBalancingConfiguration, FPS float64) *WorkloadBalance {

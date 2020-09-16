@@ -280,3 +280,18 @@ func (c *TrackingConfiguration) WriteToFile(filename string) error {
 
 	return nil
 }
+
+func LoadDefaultTrackingConfiguration() *TrackingConfiguration {
+	res := RecommendedTrackingConfiguration()
+	systemConfig, err := ReadConfiguration("/etc/default/leto.yml")
+	if err != nil {
+		return &res
+	}
+
+	err = res.Merge(systemConfig)
+	if err != nil {
+		res = RecommendedTrackingConfiguration()
+	}
+
+	return &res
+}
