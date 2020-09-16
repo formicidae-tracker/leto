@@ -18,6 +18,7 @@ import (
 	"github.com/blang/semver"
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/leto"
+	"github.com/google/uuid"
 )
 
 type ArtemisManager struct {

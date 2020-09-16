@@ -3,7 +3,6 @@
 # administrator. If you want to use the site default, you simply do
 # not need to specify anything and comment the line
 #
-#
 
 
 # The name of the experiment if it is empty the tracking will be set
@@ -20,18 +19,14 @@ legacy-mode: false
 new-ant-roi: 600
 
 # The process of saving new discovered tag is reset after a defined
-# period. Too small poeriod will produce a lot of data
-new-ant-renew-period: 2h
-
-# When turned on, a window will be opened on the host and the tracking
-# will be displayed in realtime. This option may reduce a bit the
-# tracking performance.
-host-display: false
+# period. Too small period will produce a lot of data
+image-renew-period: 2h
 
 
-# Camera illumination settings
+
+# Camera settings
 camera:
-  # fps to run the experiment
+  # acquisition frames per second
   fps: 8.0
   # delay of the illumination relatively to the camera trigger
   strobe-delay: 0us
@@ -42,15 +37,17 @@ camera:
 # Apriltag detection settings. For more information refers to apriltag
 # implementation
 apriltag:
-  # family to use. Most user will have to change it
-  family: 36h11
+  # family to use. if set to the empty string, no detection will be
+  # performed (but the frames will be acquired and streamed). Sensible
+  # values are families "36h11", and "Standard41h12"
+  family:
   # image quad detection section
   quad:
     # The only main setting that need to be tuned. When looking for
     # quad in the image, the detector looks for black/white frontier,
     # with a local difference higher than this value. Decreasing this
     # value would cause more quads to be detected, but it would take a
-    # larger computation time to remove quads that aren't tags.
+    # larger computation time to remove detected quads that aren't tags.
     min-black-white-diff: 50
 
     # quad decimation. could be 1 1.5 or 2. Increasing it will makes
@@ -97,15 +94,22 @@ apriltag:
 # tuning. Tempering with value may increase a lot local disk usage.
 stream:
 
-
-#  host to stream to. If none is specified, artemis won't try to 
-#  connect to a stream server. In most site where a stream server 
-# is available (lausanne/bristol) this value is already sets and 
+#  host to stream to. If none is specified, artemis won't try to
+#  connect to a stream server. In most site where a stream server
+# is available (lausanne/bristol) this value is already sets and
 # do not need to be changed manually
 #  host:
 
-#  Constant bit-rate encoding of data
-#  constant-bit-rate: 2000
+#  Variable bit-rate for the encoder in kB/s . The encoder will make
+#  sure that the overall mean of data throughput will not exceed this
+#  value.
+#  bitrate: 2000
+
+#  bitrate max ratio. given the mean `bitrate` it defines the
+#  instantaneous maximum bitrate for the data stream. Default to 1.5
+#  (i.e if bitrate is 2000, the final stream will have a maximum
+#  instantaneous bitrate of 3000.
+#  bitrate-max-ratio: 1.5
 
 #  libx264 compression preset
 #  quality: fast

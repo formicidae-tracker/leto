@@ -48,9 +48,9 @@ func (s *ConfigurationSuite) TestCanBeMerged(c *C) {
 	to.ExperimentName = "foobar"
 	expected.ExperimentName = "foobar"
 
-	to.NewAntRenewPeriod = new(time.Duration)
-	*to.NewAntRenewPeriod = 10 * time.Minute
-	*expected.NewAntRenewPeriod = 10 * time.Minute
+	to.ImageRenewPeriod = new(time.Duration)
+	*to.ImageRenewPeriod = 10 * time.Minute
+	*expected.ImageRenewPeriod = 10 * time.Minute
 
 	to.Stream.Host = new(string)
 	*to.Stream.Host = "google.com"
@@ -59,6 +59,8 @@ func (s *ConfigurationSuite) TestCanBeMerged(c *C) {
 	to.Camera.FPS = new(float64)
 	*to.Camera.FPS = 10.0
 	*expected.Camera.FPS = 10.0
+	to.Camera.StubPaths = &[]string{"foo.png", "bar.png"}
+	*expected.Camera.StubPaths = []string{"foo.png", "bar.png"}
 
 	to.Detection.Family = new(string)
 	*to.Detection.Family = "36ARTag"
@@ -83,14 +85,14 @@ func (s *ConfigurationSuite) TestYAMLParsing(c *C) {
 	expected.Highlights = &([]int{1, 42, 16})
 	*expected.Detection.Quad.CriticalRadian = 0.17453
 
-	*expected.Camera.StubPath = "foo.png"
+	*expected.Camera.StubPaths = []string{"foo.png", "bar.png"}
+	*expected.Detection.Family = "36h11"
 
 	txt := `
 experiment: test-configuration
 legacy-mode: false
 new-ant-roi: 600
-new-ant-renew-period: 2h
-host-display: false
+image-renew-period: 2h
 stream:
   host: ""
   bitrate: 2000
@@ -101,7 +103,9 @@ camera:
   fps: 8.0
   strobe-delay: 0us
   strobe-duration: 1500us
-  stub-path: foo.png
+  stub-image-paths:
+    - foo.png
+    - bar.png
 apriltag:
   family: 36h11
   quad:

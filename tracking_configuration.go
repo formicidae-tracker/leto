@@ -105,7 +105,7 @@ func RecommendedDetectionConfig() TagDetectionConfiguration {
 		Family: new(string),
 		Quad:   RecommendedQuadDetectionConfiguration(),
 	}
-	*res.Family = "36h11"
+	*res.Family = ""
 	return res
 }
 
@@ -120,7 +120,7 @@ type CameraConfiguration struct {
 	StrobeDelay    *time.Duration `long:"strobe-delay" description:"delay of the strobe signal (recommended:0us)" yaml:"strobe-delay"`
 	StrobeDuration *time.Duration `long:"strobe-duration" description:"duration of the strobe signal (recommended:1500us)" yaml:"strobe-duration"`
 	FPS            *float64       `long:"f" description:"FPS to use for the experiment (recommended:8.0)" yaml:"fps"`
-	StubPath       *string        `yaml:"stub-path"`
+	StubPaths      *[]string      `yaml:"stub-image-paths"`
 }
 
 func RecommendedCameraConfiguration() CameraConfiguration {
@@ -128,12 +128,12 @@ func RecommendedCameraConfiguration() CameraConfiguration {
 		StrobeDelay:    new(time.Duration),
 		StrobeDuration: new(time.Duration),
 		FPS:            new(float64),
-		StubPath:       new(string),
+		StubPaths:      new([]string),
 	}
 	*res.StrobeDelay = 0
 	*res.StrobeDuration = 1500 * time.Microsecond
 	*res.FPS = 8.0
-	*res.StubPath = ""
+	*res.StubPaths = []string{}
 	return res
 }
 
@@ -143,7 +143,7 @@ func (from *CameraConfiguration) Merge(to *CameraConfiguration) error {
 
 type StreamConfiguration struct {
 	Host            *string  `long:"stream-host" description:"host to stream to " yaml:"host"`
-	BitRateKB       *int     `long:"stream-bitrate" description:"Constant encoding bitrate to use in kb/s (recommended:2000)" yaml:"bitrate"`
+	BitRateKB       *int     `long:"stream-bitrate" description:"Variable encoding bitrate to use in kb/s (recommended:2000)" yaml:"bitrate"`
 	BitRateMaxRatio *float64 `long:"stream-bitrate-max-ratio" description:"Constraint on the max ratio for bitrate encoding" yaml:"bitrate-max-ratio"`
 	Quality         *string  `long:"stream-quality" description:"libx264 quality preset (recommended:fast)" yaml:"quality"`
 	Tune            *string  `long:"stream-tune" description:"libx264 quality tuning (recommended:film)" yaml:"tuning"`
@@ -180,10 +180,9 @@ type LoadBalancingConfiguration struct {
 
 type TrackingConfiguration struct {
 	ExperimentName      string                      `short:"e" long:"experiment" description:"Name of the experiment to run" yaml:"experiment"`
-	DisplayOnHost       *bool                       `long:"display-on-host" description:"Opens a window and display on host the data" yaml:"host-display"`
 	LegacyMode          *bool                       `long:"legacy-mode" description:"Produces a legacy mode data output" yaml:"legacy-mode"`
 	NewAntOutputROISize *int                        `long:"new-ant-size" description:"Size of the image when a new ant is found (recommended:600)" yaml:"new-ant-roi"`
-	NewAntRenewPeriod   *time.Duration              `long:"new-ant-renew-period" description:"Period to renew ant snapshot (recommended:2h)" yaml:"new-ant-renew-period"`
+	ImageRenewPeriod    *time.Duration              `long:"image-renew-period" description:"Period to renew ant snapshot (recommended:2h)" yaml:"image-renew-period"`
 	Stream              StreamConfiguration         `yaml:"stream"`
 	Camera              CameraConfiguration         `yaml:"camera"`
 	Detection           TagDetectionConfiguration   `yaml:"apriltag"`
@@ -194,18 +193,16 @@ type TrackingConfiguration struct {
 func RecommendedTrackingConfiguration() TrackingConfiguration {
 	res := TrackingConfiguration{
 		NewAntOutputROISize: new(int),
-		NewAntRenewPeriod:   new(time.Duration),
+		ImageRenewPeriod:    new(time.Duration),
 		LegacyMode:          new(bool),
-		DisplayOnHost:       new(bool),
 		Stream:              RecommendedStreamConfiguration(),
 		Camera:              RecommendedCameraConfiguration(),
 		Detection:           RecommendedDetectionConfig(),
 		Highlights:          &([]int{}),
 	}
 	*res.NewAntOutputROISize = 600
-	*res.NewAntRenewPeriod = 2 * time.Hour
+	*res.ImageRenewPeriod = 2 * time.Hour
 	*res.LegacyMode = false
-	*res.DisplayOnHost = false
 	return res
 }
 
