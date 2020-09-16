@@ -91,27 +91,15 @@ func getFirmwareVariant() (string, error) {
 	return extractCoaxlinkFirmwareOutput(output)
 }
 
-func CheckFirmwareVariant(c NodeConfiguration, variant string, checkMaster bool) error {
-	expected := "1-camera"
-	if c.IsMaster() == false {
-		expected = "1-df-camera"
-	} else if checkMaster == false {
-		return nil
-	}
-
-	if variant != expected {
-		return fmt.Errorf("Unexpected firmware variant %s (expected: %s)", variant, expected)
-	}
-
-	return nil
-}
-
 func getAndCheckFirmwareVariant() (bool, error) {
 	variant, err := getFirmwareVariant()
 	if err != nil {
 		return false, err
 	}
+	return checkFirmwareVariant(variant)
+}
 
+func checkFirmwareVariant(variant string) (bool, error) {
 	switch variant {
 	case "1-camera":
 		return true, nil

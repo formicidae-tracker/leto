@@ -86,50 +86,35 @@ func (s *ArtemisManagerSuite) TestCanCheckVersion(c *C) {
 
 func (s *ArtemisManagerSuite) TestCheckFirmwareVariant(c *C) {
 	testdata := []struct {
-		C           NodeConfiguration
-		Variant     string
-		CheckMaster bool
-		Expected    string
+		Variant          string
+		Expected         string
+		ExpectedIsMaster bool
 	}{
 		{
-			//if not checking master, could even not have a firmware variant
+			Variant:          "",
+			Expected:         `Unknown firmware variant ''`,
+			ExpectedIsMaster: false,
 		},
 		{
-			CheckMaster: true,
-			Expected:    `Unexpected firmware variant  \(expected: 1-camera\)`,
+			Variant:          "1-df-camera",
+			ExpectedIsMaster: false,
+			Expected:         "",
 		},
 		{
-			Variant:     "1-df-camera",
-			CheckMaster: true,
-			Expected:    `Unexpected firmware variant 1-df-camera \(expected: 1-camera\)`,
-		},
-		{
-			Variant:     "1-camera",
-			CheckMaster: true,
-		},
-		{
-			C:        NodeConfiguration{Master: "foo"},
-			Variant:  "",
-			Expected: `Unexpected firmware variant  \(expected: 1-df-camera\)`,
-		},
-		{
-			C:           NodeConfiguration{Master: "foo"},
-			CheckMaster: true,
-			Variant:     "1-camera",
-			Expected:    `Unexpected firmware variant 1-camera \(expected: 1-df-camera\)`,
-		},
-		{
-			C:       NodeConfiguration{Master: "foo"},
-			Variant: "1-df-camera",
+			Variant:          "1-camera",
+			ExpectedIsMaster: true,
+			Expected:         "",
 		},
 	}
 
 	for _, d := range testdata {
-		err := CheckFirmwareVariant(d.C, d.Variant, d.CheckMaster)
+		isMaster, err := checkFirmwareVariant(d.Variant)
 		if len(d.Expected) == 0 {
-			c.Check(err, IsNil)
-			continue
+			c.Check(err, IsNil, Commentf("For variant '%s'", d.Variant))
+			c.Check(isMaster, Equals, d.ExpectedIsMaster)
+		} else {
+			c.Check(err, ErrorMatches, d.Expected)
+			c.Check(isMaster, Equals, false)
 		}
-		c.Check(err, ErrorMatches, d.Expected)
 	}
 }
