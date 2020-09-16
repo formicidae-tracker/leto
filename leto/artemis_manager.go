@@ -18,7 +18,6 @@ import (
 	"github.com/blang/semver"
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/leto"
-	"github.com/google/uuid"
 )
 
 type ArtemisManager struct {
@@ -207,8 +206,8 @@ func (m *ArtemisManager) InsertResolutionInConfig() error {
 
 	cmd := exec.Command("artemis", "--fetch-resolution")
 
-	if m.config.Camera.StubPath != nil || len(*m.config.Camera.StubPath) > 0 {
-		cmd.Args = append(cmd.Args, "--stub-image-path", *m.config.Camera.StubPath)
+	if m.config.Camera.StubPaths != nil || len(*m.config.Camera.StubPaths) > 0 {
+		cmd.Args = append(cmd.Args, "--stub-image-paths", strings.Join(*m.config.Camera.StubPaths, ","))
 	}
 
 	out, err := cmd.CombinedOutput()
@@ -393,7 +392,7 @@ func (m *ArtemisManager) SetUpStreamManager() error {
 	if m.isMaster == true {
 		m.artemisCmd.Args = append(m.artemisCmd.Args, "--new-ant-output-dir", m.AntOutputDir(),
 			"--new-ant-roi-size", fmt.Sprintf("%d", *m.config.NewAntOutputROISize),
-			"--ant-renew-period-hour", fmt.Sprintf("%f", m.config.NewAntRenewPeriod.Hours()))
+			"--ant-renew-period-hour", fmt.Sprintf("%f", m.config.ImageRenewPeriod.Hours()))
 		m.streamIn, m.artemisOut = io.Pipe()
 		m.artemisCmd.Stdout = m.artemisOut
 		var err error
@@ -606,8 +605,8 @@ func (m *ArtemisManager) TrackingCommand(config *leto.TrackingConfiguration, wb 
 
 	args := []string{}
 
-	if len(*config.Camera.StubPath) != 0 {
-		args = append(args, "--stub-image-path", *m.config.Camera.StubPath)
+	if len(*config.Camera.StubPaths) != 0 {
+		args = append(args, "--stub-image-paths", strings.Join(*m.config.Camera.StubPaths, ","))
 	}
 
 	if m.testMode == true {
@@ -663,10 +662,6 @@ func (m *ArtemisManager) TrackingCommand(config *leto.TrackingConfiguration, wb 
 
 	if len(tags) != 0 {
 		m.artemisCmd.Args = append(m.artemisCmd.Args, "--highlight-tags", strings.Join(tags, ","))
-	}
-
-	if *config.DisplayOnHost == true {
-		args = append(args, "-d", "--draw-detection")
 	}
 
 	args = append(args, "--log-output-dir", m.experimentDir)
