@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -19,6 +20,29 @@ import (
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/leto"
 )
+
+func NewLastExperimentStatus(hasError bool,
+	startTime time.Time,
+	config *leto.TrackingConfiguration,
+	experimentDir string) *leto.LastExperimentStatus {
+	endTime := time.Now()
+
+	log, err := ioutil.ReadFile(filepath.Join(experimentDir, "artemis.INFO"))
+	if err != nil {
+		toAdd := fmt.Sprintf("Could not read log: %s", err)
+
+		log = append(log, []byte(toAdd)...)
+	}
+
+	return &leto.LastExperimentStatus{
+		HasError:      hasError,
+		ExperimentDir: filepath.Base(experimentDir),
+		Start:         startTime,
+		End:           endTime,
+		Config:        *config,
+		Log:           log,
+	}
+}
 
 type ArtemisManager struct {
 	incoming, merged, file, broadcast chan *hermes.FrameReadout
@@ -44,6 +68,8 @@ type ArtemisManager struct {
 
 	workloadBalance   *WorkloadBalance
 	artemisCommandLog io.WriteCloser
+
+	lastExperiment *leto.LastExperimentStatus
 }
 
 func CheckArtemisVersion(actual, minimal string) error {
@@ -140,13 +166,23 @@ func NewArtemisManager() (*ArtemisManager, error) {
 	}, nil
 }
 
-func (m *ArtemisManager) Status() (bool, string, time.Time) {
+func (m *ArtemisManager) Status() *leto.Status {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 	if m.incoming == nil {
-		return false, "", time.Time{}
+		return nil
 	}
-	return true, m.experimentName, m.since
+	return &leto.Status{
+		Since:         m.since,
+		Configuration: *m.config,
+		ExperimentDir: filepath.Base(m.experimentDir),
+	}
+}
+
+func (m *ArtemisManager) LastExperimentStatus() *leto.LastExperimentStatus {
+	m.mx.Lock()
+	defer m.mx.Unlock()
+	return m.lastExperiment
 }
 
 func (m *ArtemisManager) ExperimentDir(expname string) (string, error) {
@@ -443,6 +479,9 @@ func (m *ArtemisManager) SpawnTracker() {
 		if err != nil {
 			m.logger.Printf("artemis child process exited with error: %s", err)
 		}
+
+		m.lastExperiment = NewLastExperimentStatus(err != nil, m.since, m.config, m.experimentDir)
+
 		m.artemisCmd = nil
 		//Stops the reading of frame readout, it will close all the chain
 		if m.trackers != nil {
@@ -586,11 +625,7 @@ func (m *ArtemisManager) Stop() error {
 }
 
 func (m *ArtemisManager) TrackingCommand(config *leto.TrackingConfiguration, wb *WorkloadBalance) *exec.Cmd {
-	targetHost := "localhost"
-	if m.isMaster == false {
-		targetHost = config.Loads.Master + ".local"
-	}
-
+	targetHost := config.Loads.Master + ".local"
 	args := []string{}
 
 	if len(*config.Camera.StubPaths) != 0 {
