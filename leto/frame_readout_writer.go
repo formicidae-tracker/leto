@@ -154,7 +154,7 @@ func (w *FrameReadoutFileWriter) WriteAll(readout <-chan *hermes.FrameReadout) {
 				return
 			}
 			if w.file == nil {
-				err := w.openFile(nextName, "uncompressed-"+nextName, r.Width, r.Height)
+				err := w.openFile(nextName, nextName+"unc", r.Width, r.Height)
 				if err != nil {
 					w.logger.Printf("Could not create file '%s': %s", nextName, err)
 					return
