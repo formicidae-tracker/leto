@@ -13,13 +13,13 @@ import (
 )
 
 type FrameReadoutFileWriter struct {
-	period   time.Duration
-	basename string
-	lastname string
-	file     *os.File
-	gzip     *gzip.Writer
-	logger   *log.Logger
-	quit     chan struct{}
+	period                         time.Duration
+	basename                       string
+	lastname, lastUncompressedName string
+	file, uncompressed             *os.File
+	gzip                           *gzip.Writer
+	logger                         *log.Logger
+	quit                           chan struct{}
 }
 
 func NewFrameReadoutWriter(filepath string) (*FrameReadoutFileWriter, error) {
@@ -33,12 +33,17 @@ func NewFrameReadoutWriter(filepath string) (*FrameReadoutFileWriter, error) {
 
 }
 
-func (w *FrameReadoutFileWriter) openFile(filep string, width, height int32) error {
+func (w *FrameReadoutFileWriter) openFile(filename, filenameUncompressed string, width, height int32) error {
 	var err error
-	w.file, err = os.Create(filep)
+	w.file, err = os.Create(filename)
 	if err != nil {
 		return err
 	}
+	w.uncompressed, err = os.Create(filenameUncompressed)
+	if err != nil {
+		return err
+	}
+
 	w.gzip = gzip.NewWriter(w.file)
 
 	header := &hermes.Header{
@@ -54,7 +59,8 @@ func (w *FrameReadoutFileWriter) openFile(filep string, width, height int32) err
 		header.Previous = filepath.Base(w.lastname)
 	}
 
-	w.lastname = filep
+	w.lastname = filename
+	w.lastUncompressedName = filenameUncompressed
 
 	b := proto.NewBuffer(nil)
 	err = b.EncodeMessage(header)
@@ -63,7 +69,11 @@ func (w *FrameReadoutFileWriter) openFile(filep string, width, height int32) err
 	}
 
 	_, err = w.gzip.Write(b.Bytes())
-	log.Printf("Writing to file '%s'", filep)
+	if err != nil {
+		return err
+	}
+	_, err = w.uncompressed.Write(b.Bytes())
+	log.Printf("Writing to file '%s' and '%s'", filename, filenameUncompressed)
 	return err
 }
 
@@ -85,6 +95,9 @@ func (w *FrameReadoutFileWriter) closeFiles(nextFile string) {
 			if _, err := w.gzip.Write(b.Bytes()); err != nil {
 				w.logger.Printf("Could not write footer: %s", err)
 			}
+			if _, err := w.uncompressed.Write(b.Bytes()); err != nil {
+				w.logger.Printf("Could not write uncompressed footer: %s", err)
+			}
 		}
 	}
 
@@ -100,7 +113,14 @@ func (w *FrameReadoutFileWriter) closeFiles(nextFile string) {
 		}
 		w.file = nil
 	}
-
+	if w.uncompressed != nil {
+		if err := w.uncompressed.Close(); err != nil {
+			w.logger.Printf("could not close uncompressed file '%s': %s", w.lastUncompressedName, err)
+		}
+		if err := os.RemoveAll(w.lastUncompressedName); err != nil {
+			w.logger.Printf("could not remove last uncompressed segment '%s': %s", w.lastUncompressedName, err)
+		}
+	}
 }
 
 func (w *FrameReadoutFileWriter) Close() error {
@@ -134,7 +154,7 @@ func (w *FrameReadoutFileWriter) WriteAll(readout <-chan *hermes.FrameReadout) {
 				return
 			}
 			if w.file == nil {
-				err := w.openFile(nextName, r.Width, r.Height)
+				err := w.openFile(nextName, "uncompressed-"+nextName, r.Width, r.Height)
 				if err != nil {
 					w.logger.Printf("Could not create file '%s': %s", nextName, err)
 					return
@@ -167,6 +187,12 @@ func (w *FrameReadoutFileWriter) WriteAll(readout <-chan *hermes.FrameReadout) {
 				w.logger.Printf("Could not write message: %s", err)
 				return
 			}
+			_, err = w.uncompressed.Write(b.Bytes())
+			if err != nil {
+				w.logger.Printf("Could not write uncompressed message: %s", err)
+				return
+			}
+
 			if closeNext == false {
 				continue
 			}
