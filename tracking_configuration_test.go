@@ -61,6 +61,9 @@ func (s *ConfigurationSuite) TestCanBeMerged(c *C) {
 	*expected.Camera.FPS = 10.0
 	to.Camera.StubPaths = &[]string{"foo.png", "bar.png"}
 	*expected.Camera.StubPaths = []string{"foo.png", "bar.png"}
+	to.Camera.ROI = new(string)
+	*to.Camera.ROI = "1:1:100:100"
+	*expected.Camera.ROI = "1:1:100:100"
 
 	to.Detection.Family = new(string)
 	*to.Detection.Family = "36ARTag"
@@ -107,6 +110,7 @@ camera:
   stub-image-paths:
     - foo.png
     - bar.png
+  ROI: ""
 apriltag:
   family: 36h11
   quad:

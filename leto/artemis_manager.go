@@ -798,6 +798,11 @@ func (m *ArtemisManager) buildTrackingCommand() *exec.Cmd {
 	args = append(args, "--camera-fps", fmt.Sprintf("%f", *m.experimentConfig.Camera.FPS))
 	args = append(args, "--camera-strobe", fmt.Sprintf("%s", m.experimentConfig.Camera.StrobeDuration))
 	args = append(args, "--camera-strobe-delay", fmt.Sprintf("%s", m.experimentConfig.Camera.StrobeDelay))
+
+	if len(*m.experimentConfig.Camera.ROI) > 0 {
+		args = append(args, "--camera-roi", *m.experimentConfig.Camera.ROI)
+	}
+
 	args = append(args, "--at-family", *m.experimentConfig.Detection.Family)
 	args = append(args, "--at-quad-decimate", fmt.Sprintf("%f", *m.experimentConfig.Detection.Quad.Decimate))
 	args = append(args, "--at-quad-sigma", fmt.Sprintf("%f", *m.experimentConfig.Detection.Quad.Sigma))
