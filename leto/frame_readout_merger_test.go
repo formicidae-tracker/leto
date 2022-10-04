@@ -193,121 +193,121 @@ func (s *FrameReadoutMergerSuite) TestEnd2End(c *C) {
 	}
 
 	expected := []*hermes.FrameReadout{
-		&hermes.FrameReadout{
+		{
 			FrameID:      0,
 			Timestamp:    1000,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      1,
 			Timestamp:    1009,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      2,
 			Timestamp:    1021,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      3,
 			Timestamp:    1029,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      4,
 			Timestamp:    1049,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      5,
 			Timestamp:    1047,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      6,
 			Timestamp:    0,
 			Error:        hermes.FrameReadout_PROCESS_TIMEOUT,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      7,
 			Timestamp:    1069,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      8,
 			Timestamp:    0,
 			Error:        hermes.FrameReadout_PROCESS_TIMEOUT,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      9,
 			Timestamp:    1090,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      10,
 			Timestamp:    1100,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      11,
 			Timestamp:    1110,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      12,
 			Timestamp:    1120,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      13,
 			Timestamp:    1130,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      14,
 			Timestamp:    1140,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      15,
 			Timestamp:    1150,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      16,
 			Timestamp:    1160,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      17,
 			Timestamp:    1170,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      18,
 			Timestamp:    1180,
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "",
 		},
-		&hermes.FrameReadout{
+		{
 			FrameID:      19,
 			Timestamp:    1190,
 			Error:        hermes.FrameReadout_NO_ERROR,
@@ -315,15 +315,15 @@ func (s *FrameReadoutMergerSuite) TestEnd2End(c *C) {
 		},
 	}
 
-	inbound := make(chan *hermes.FrameReadout)
-	outbound := make(chan *hermes.FrameReadout)
+	inbound := make(chan *hermes.FrameReadout, 100)
+	outbound := make(chan *hermes.FrameReadout, len(testdata))
 
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
 		start := time.Now()
 		for _, d := range testdata {
-			time.Sleep(start.Add(d.T).Sub(start))
+			time.Sleep(start.Add(d.T).Sub(time.Now()))
 			d.R.Time, _ = ptypes.TimestampProto(start.Add(d.T))
 			d.R.Timestamp = d.TS
 			inbound <- d.R
@@ -336,8 +336,8 @@ func (s *FrameReadoutMergerSuite) TestEnd2End(c *C) {
 		Stride:     2,
 		MasterUUID: "foo",
 		IDsByUUID: map[string][]bool{
-			"foo": []bool{true, false},
-			"bar": []bool{false, true},
+			"foo": {true, false},
+			"bar": {false, true},
 		},
 	}
 
@@ -353,17 +353,23 @@ func (s *FrameReadoutMergerSuite) TestEnd2End(c *C) {
 
 	i := 0
 	for r := range outbound {
-		c.Check(r.FrameID, Equals, expected[i].FrameID)
-		c.Check(r.Error, Equals, expected[i].Error)
-		c.Check(r.ProducerUuid, Equals, expected[i].ProducerUuid)
+		if c.Check(i < len(expected), Equals, true) == false {
+			i += 1
+			continue
+		}
+		comment := Commentf("Expected[%d]: %+v", i, expected[i])
+
+		c.Check(r.FrameID, Equals, expected[i].FrameID, comment)
+		c.Check(r.Error, Equals, expected[i].Error, comment)
+		c.Check(r.ProducerUuid, Equals, expected[i].ProducerUuid, comment)
 		if r.Error != hermes.FrameReadout_PROCESS_TIMEOUT {
-			c.Check(r.Timestamp, Equals, expected[i].Timestamp, Commentf("For frame %d", r.FrameID))
+			c.Check(r.Timestamp, Equals, expected[i].Timestamp, comment)
 		} else {
-			c.Check(r.Timestamp, Equals, int64(0))
+			c.Check(r.Timestamp, Equals, int64(0), comment)
 		}
 		i += 1
 	}
-	c.Check(i, Equals, len(expected))
+	c.Check(expected, HasLen, i)
 	wg.Wait()
 
 }

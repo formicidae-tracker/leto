@@ -40,8 +40,6 @@ message TrackingLink {
 	string slave  = 2;
 }
 
-
-
 service Leto {
 	rpc StartTracking(StartRequest) returns ( Empty );
 	rpc StopTracking(Empty) returns (Empty);

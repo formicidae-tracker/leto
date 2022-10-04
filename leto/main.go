@@ -10,10 +10,12 @@ import (
 	"os/signal"
 
 	"github.com/formicidae-tracker/leto"
+	"github.com/formicidae-tracker/leto/letopb"
 	"github.com/grandcat/zeroconf"
 )
 
 type Leto struct {
+	letopb.UnimplementedLetoServer
 	artemis *ArtemisManager
 	logger  *log.Logger
 }
