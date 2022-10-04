@@ -21,8 +21,8 @@ func (c *LastExperimentLogCommand) Execute(args []string) error {
 		return err
 	}
 
-	log := leto.ExperimentLog{}
-	if err := n.RunMethod("Leto.LastExperimentLog", &leto.NoArgs{}, &log); err != nil {
+	log, err := n.GetLastExperimentLog()
+	if err != nil {
 		return err
 	}
 

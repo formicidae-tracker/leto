@@ -1,9 +1,5 @@
 package main
 
-import (
-	"github.com/formicidae-tracker/leto"
-)
-
 type StopCommand struct {
 	Args struct {
 		Node Nodename
@@ -18,11 +14,7 @@ func (c *StopCommand) Execute([]string) error {
 		return err
 	}
 
-	resp := &leto.Response{}
-	if err := n.RunMethod("Leto.StopTracking", &leto.NoArgs{}, resp); err != nil {
-		return err
-	}
-	return resp.ToError()
+	return n.StopTracking()
 }
 
 func init() {

@@ -1,8 +1,6 @@
 package main
 
-import (
-	"github.com/formicidae-tracker/leto"
-)
+import "github.com/formicidae-tracker/leto/letopb"
 
 type LinkingOptions struct {
 	Args struct {
@@ -27,15 +25,16 @@ func (c *LinkingOptions) Execute(args []string) error {
 		return err
 	}
 
-	argsL := leto.Link{
+	link := &letopb.TrackingLink{
 		Master: master.Name,
 		Slave:  slave.Name,
 	}
-	resp := &leto.Response{}
-	if err := master.RunMethod(c.command, argsL, resp); err != nil {
-		return err
+	if c.command == "Leto.Link" {
+		err = master.Link(link)
+	} else if c.command == "Leto.Link" {
+		err = master.Unlink(link)
 	}
-	return resp.ToError()
+	return err
 }
 
 func init() {

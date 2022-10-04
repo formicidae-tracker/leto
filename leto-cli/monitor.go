@@ -43,8 +43,7 @@ func (c *MonitorCommand) getStatuses() (map[string]*leto.TrackingConfiguration, 
 		go func() {
 			defer wg.Done()
 
-			status := leto.Status{}
-			err := n.RunMethod("Leto.Status", &leto.NoArgs{}, &status)
+			status, err := n.GetStatus()
 			if err != nil {
 				results <- Result{Instance: n.Name, Config: nil, Error: err}
 				return

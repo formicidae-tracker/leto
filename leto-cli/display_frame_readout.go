@@ -45,12 +45,11 @@ func (c *DisplayFrameReadoutCommand) Execute(args []string) error {
 		return err
 	}
 
-	resp := leto.Status{}
-	err = n.RunMethod("Leto.Status", &leto.NoArgs{}, &resp)
+	status, err := n.GetStatus()
 	if err != nil {
 		return fmt.Errorf("Could not query '%s' status: %s", n.Name, err)
 	}
-	if resp.Experiment == nil {
+	if status.Experiment == nil {
 		return fmt.Errorf("'%s' is not running", n.Name)
 	}
 

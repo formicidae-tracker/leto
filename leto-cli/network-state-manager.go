@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 
 	"github.com/formicidae-tracker/leto"
+	"github.com/formicidae-tracker/leto/letopb"
 	"github.com/jessevdk/go-flags"
 	"gopkg.in/yaml.v2"
 )
@@ -26,8 +27,7 @@ type networkState struct {
 }
 
 func fetchNodeConfig(n leto.Node) (*leto.TrackingConfiguration, error) {
-	status := leto.Status{}
-	err := n.RunMethod("Leto.Status", &leto.NoArgs{}, &status)
+	status, err := n.GetStatus()
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +92,7 @@ func stopTracking(name Nodename) error {
 	if err != nil {
 		return err
 	}
-	reply := leto.Response{}
-	err = node.RunMethod("Leto.StopTracking", &leto.NoArgs{}, &reply)
-	if err != nil {
-		return err
-	}
-	return reply.ToError()
+	return node.StopTracking()
 }
 
 func startTracking(name Nodename, config leto.TrackingConfiguration) error {
@@ -105,12 +100,13 @@ func startTracking(name Nodename, config leto.TrackingConfiguration) error {
 	if err != nil {
 		return err
 	}
-	reply := leto.Response{}
-	err = node.RunMethod("Leto.StartTracking", &config, &reply)
+	asYaml, err := config.Yaml()
 	if err != nil {
 		return err
 	}
-	return reply.ToError()
+	request := &letopb.StartRequest{YamlConfiguration: string(asYaml)}
+
+	return node.StartTracking(request)
 }
 
 func (c *SaveNetworkStateCommand) Execute(args []string) error {

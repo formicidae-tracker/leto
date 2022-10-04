@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
-	"net/rpc"
+	"net"
 	"os"
 	"os/signal"
 
 	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/letopb"
 	"github.com/grandcat/zeroconf"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Leto struct {
@@ -20,123 +22,122 @@ type Leto struct {
 	logger  *log.Logger
 }
 
-func (l *Leto) StartTracking(args *leto.TrackingConfiguration, resp *leto.Response) error {
-	l.logger.Printf("new start request for experiment '%s'", args.ExperimentName)
-	err := l.artemis.Start(args)
+func (l *Leto) StartTracking(c context.Context, request *letopb.StartRequest) (*letopb.Empty, error) {
+	config, err := leto.ParseConfiguration([]byte(request.YamlConfiguration))
 	if err != nil {
-		resp.Error = err.Error()
-	} else {
-		resp.Error = ""
+		return nil, status.Errorf(codes.InvalidArgument, "could not parse configuration: %s", err)
 	}
-	return nil
+
+	l.logger.Printf("new start request for experiment '%s'", config.ExperimentName)
+
+	err = l.artemis.Start(config)
+	if err != nil {
+		return nil, err
+	}
+	return &letopb.Empty{}, nil
 }
 
-func (l *Leto) StopTracking(args *leto.NoArgs, resp *leto.Response) error {
+func (l *Leto) StopTracking(context.Context, *letopb.Empty) (*letopb.Empty, error) {
 	l.logger.Printf("new stop request")
 	err := l.artemis.Stop()
 	if err != nil {
-		resp.Error = err.Error()
-	} else {
-		resp.Error = ""
+		return nil, err
 	}
-	return nil
+	return &letopb.Empty{}, nil
 }
 
-func (l *Leto) Status(args *leto.NoArgs, resp *leto.Status) error {
-	*resp = l.artemis.Status()
-	return nil
+func (l *Leto) GetStatus(context.Context, *letopb.Empty) (*letopb.Status, error) {
+	return l.artemis.Status(), nil
 }
 
-func (l *Leto) LastExperimentLog(args *leto.NoArgs, reply **leto.ExperimentLog) error {
-	*reply = l.artemis.LastExperimentLog()
-	return nil
+func (l *Leto) GetLastExperimentLog(context.Context, *letopb.Empty) (*letopb.ExperimentLog, error) {
+	return nil, fmt.Errorf("Not yet implemented")
 }
 
-func (l *Leto) Link(args *leto.Link, resp *leto.Response) error {
-	var err error = nil
-	defer func() {
-		resp.Error = ""
-		if err != nil {
-			resp.Error = err.Error()
-		}
-	}()
-	host, err := os.Hostname()
+func (l *Leto) checkTrackingLink(link *letopb.TrackingLink) (string, error) {
+	hostname, err := os.Hostname()
 	if err != nil {
-		return nil
+		return "", status.Errorf(codes.Unavailable, "could not found hostname: %s", err)
 	}
 
-	if args.Master != host && args.Slave != host {
-		err = fmt.Errorf("Host %s is neither master (%s) or slave (%s)", host, args.Master, args.Slave)
-		return nil
+	if link.Master != hostname && link.Slave != hostname {
+		return "", status.Errorf(codes.InvalidArgument,
+			"current hostname (%s) is neither the link.Master:%s or link.Slave:%s",
+			hostname,
+			link.Master,
+			link.Slave)
 	}
+	return hostname, err
+}
 
-	if args.Slave == host {
-		err = l.artemis.SetMaster(args.Master)
-		return nil
-	}
+func (l *Leto) getSlave(name string) (leto.Node, error) {
 	nodes, err := leto.NewNodeLister().ListNodes()
 	if err != nil {
-		return fmt.Errorf("Could not list local nodes: %s", err)
+		return leto.Node{}, status.Errorf(codes.Unavailable, "could not list local nodes: %s", err)
 	}
-	slave, ok := nodes[args.Slave]
+	slave, ok := nodes[name]
 	if ok == false {
-		return fmt.Errorf("Could not find slave '%s'", args.Slave)
+		return leto.Node{}, status.Errorf(codes.Unavailable, "could not find slave '%s'", name)
 	}
-
-	respSlave := leto.Response{}
-	err = slave.RunMethod("Leto.Link", args, &respSlave)
-	if err == nil {
-		err = respSlave.ToError()
-	}
-	if err != nil {
-		return err
-	}
-
-	return l.artemis.AddSlave(args.Slave)
+	return slave, nil
 }
 
-func (l *Leto) Unlink(args *leto.Link, resp *leto.Response) error {
-	var err error = nil
-	defer func() {
-		resp.Error = ""
-		if err != nil {
-			resp.Error = err.Error()
+func (l *Leto) Link(c context.Context, link *letopb.TrackingLink) (*letopb.Empty, error) {
+	hostname, err := l.checkTrackingLink(link)
+	if err != nil {
+		return nil, err
+	}
+
+	if link.Slave == hostname {
+		if err := l.artemis.SetMaster(link.Master); err != nil {
+			return nil, err
 		}
-	}()
-	host, err := os.Hostname()
+		return &letopb.Empty{}, nil
+	}
+	slave, err := l.getSlave(link.Slave)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
-	if args.Master != host && args.Slave != host {
-		err = fmt.Errorf("Host %s is neither master (%s) or slave (%s)", host, args.Master, args.Slave)
-		return nil
-	}
-
-	if args.Slave == host {
-		err = l.artemis.SetMaster("")
-		return nil
-	}
-
-	nodes, err := leto.NewNodeLister().ListNodes()
+	err = slave.Link(link)
 	if err != nil {
-		return fmt.Errorf("Could not list local nodes: %s", err)
-	}
-	slave, ok := nodes[args.Slave]
-	if ok == false {
-		return fmt.Errorf("Could not find slave '%s'", args.Slave)
+		return nil, err
 	}
 
-	respSlave := leto.Response{}
-	err = slave.RunMethod("Leto.Unlink", args, &respSlave)
-	if err == nil {
-		err = respSlave.ToError()
-	}
+	err = l.artemis.AddSlave(link.Slave)
 	if err != nil {
-		return fmt.Errorf("Could not unlink slave '%s': %s", args.Slave, err)
+		return nil, err
+	}
+	return &letopb.Empty{}, nil
+}
+
+func (l *Leto) Unlink(c context.Context, link *letopb.TrackingLink) (*letopb.Empty, error) {
+	hostname, err := l.checkTrackingLink(link)
+	if err != nil {
+		return nil, err
+	}
+	if link.Slave == hostname {
+		err := l.artemis.SetMaster("")
+		if err != nil {
+			return nil, err
+		}
+		return &letopb.Empty{}, nil
+	}
+	slave, err := l.getSlave(link.Slave)
+	if err != nil {
+		return nil, err
 	}
 
-	return l.artemis.RemoveSlave(args.Slave)
+	err = slave.Unlink(link)
+	if err != nil {
+		return nil, err
+	}
+
+	err = l.artemis.RemoveSlave(link.Slave)
+	if err != nil {
+		return nil, err
+	}
+	return &letopb.Empty{}, nil
 }
 
 func Execute() error {
@@ -158,23 +159,23 @@ func Execute() error {
 
 	l.artemis.LoadFromPersistentFile()
 
-	l.logger = log.New(os.Stderr, "[rpc] ", 0)
-	rpcRouter := rpc.NewServer()
-	rpcRouter.Register(l)
-	rpcRouter.HandleHTTP(rpc.DefaultRPCPath, rpc.DefaultDebugPath)
-	rpcServer := http.Server{
-		Addr:    fmt.Sprintf(":%d", leto.LETO_PORT),
-		Handler: rpcRouter,
+	l.logger = log.New(os.Stderr, "[gRPC] ", 0)
+
+	addr := fmt.Sprintf(":%d", leto.LETO_PORT)
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
 	}
+
+	server := grpc.NewServer()
+	letopb.RegisterLetoServer(server, l)
 
 	idleConnections := make(chan struct{})
 	go func() {
 		sigint := make(chan os.Signal, 1)
 		signal.Notify(sigint, os.Interrupt)
 		<-sigint
-		if err := rpcServer.Shutdown(context.Background()); err != nil {
-			l.logger.Printf("could not shutdown: %s", err)
-		}
+		server.GracefulStop()
 		close(idleConnections)
 	}()
 
@@ -190,8 +191,8 @@ func Execute() error {
 		server.Shutdown()
 	}()
 
-	l.logger.Printf("listening on %s", rpcServer.Addr)
-	if err := rpcServer.ListenAndServe(); err != http.ErrServerClosed {
+	l.logger.Printf("listening on %s", addr)
+	if err := server.Serve(lis); err != nil {
 		return err
 	}
 

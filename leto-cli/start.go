@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/formicidae-tracker/leto"
+	"github.com/formicidae-tracker/leto/letopb"
 	"github.com/jessevdk/go-flags"
 )
 
@@ -36,11 +37,16 @@ func (c *StartCommand) Execute(args []string) error {
 		config = fileConfig
 	}
 	config.Loads = nil
-	resp := &leto.Response{}
-	if err := n.RunMethod("Leto.StartTracking", config, resp); err != nil {
+
+	asYaml, err := config.Yaml()
+	if err != nil {
 		return err
 	}
-	return resp.ToError()
+	request := &letopb.StartRequest{
+		YamlConfiguration: string(asYaml),
+	}
+
+	return n.StartTracking(request)
 }
 
 func init() {

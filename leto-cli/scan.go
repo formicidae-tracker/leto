@@ -10,6 +10,7 @@ import (
 
 	"github.com/atuleu/go-tablifier"
 	"github.com/formicidae-tracker/leto"
+	"github.com/formicidae-tracker/leto/letopb"
 	"gopkg.in/yaml.v2"
 )
 
@@ -20,7 +21,7 @@ var scanCommand = &ScanCommand{}
 
 type Result struct {
 	Instance string
-	Status   leto.Status
+	Status   *letopb.Status
 }
 
 func (r Result) running() int {
@@ -49,9 +50,7 @@ func (c *ScanCommand) Execute(args []string) error {
 		go func() {
 			defer wg.Done()
 
-			status := leto.Status{}
-			err := n.RunMethod("Leto.Status", &leto.NoArgs{}, &status)
-
+			status, err := n.GetStatus()
 			if err != nil {
 				errors <- err
 				return
@@ -94,7 +93,7 @@ func (c *ScanCommand) Execute(args []string) error {
 			config := leto.TrackingConfiguration{}
 			yaml.Unmarshal([]byte(r.Status.Experiment.YamlConfiguration), &config)
 			line.Experiment = config.ExperimentName
-			ellapsed := now.Sub(r.Status.Experiment.Since).Round(time.Second)
+			ellapsed := now.Sub(r.Status.Experiment.Since.AsTime()).Round(time.Second)
 			line.Since = fmt.Sprintf("%s", ellapsed)
 		}
 		lines = append(lines, line)

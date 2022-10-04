@@ -21,8 +21,8 @@ func (c *StatusCommand) Execute(args []string) error {
 		return err
 	}
 
-	status := leto.Status{}
-	if err := n.RunMethod("Leto.Status", &leto.NoArgs{}, &status); err != nil {
+	status, err := n.GetStatus()
+	if err != nil {
 		return err
 	}
 

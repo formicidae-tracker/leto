@@ -3,15 +3,19 @@ package leto
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"net/rpc"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/formicidae-tracker/leto/letopb"
 	"github.com/grandcat/zeroconf"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"gopkg.in/yaml.v2"
 )
 
@@ -26,13 +30,94 @@ type Node struct {
 	Port    int    `yaml:"port"`
 }
 
-func (n Node) RunMethod(name string, args, reply interface{}) error {
-	c, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", n.Address, n.Port))
+func (n Node) DialAddress() string {
+	return fmt.Sprintf("%s:%d", n.Address, n.Port)
+}
+
+func (n Node) Connect() (*grpc.ClientConn, letopb.LetoClient, error) {
+	conn, err := grpc.Dial(
+		n.DialAddress(),
+		grpc.WithConnectParams(
+			grpc.ConnectParams{
+				MinConnectTimeout: 2 * time.Second,
+				Backoff: backoff.Config{
+					BaseDelay:  10 * time.Millisecond,
+					Multiplier: backoff.DefaultConfig.Multiplier,
+					Jitter:     backoff.DefaultConfig.Jitter,
+					MaxDelay:   200 * time.Millisecond,
+				},
+			}),
+	)
 	if err != nil {
-		return fmt.Errorf("Could not connect to '%s': %s", n.Name, err)
+		return nil, nil, err
 	}
-	defer c.Close()
-	return c.Call(name, args, reply)
+	return conn, letopb.NewLetoClient(conn), nil
+}
+
+func closeAndLogError(c io.Closer) {
+	err := c.Close()
+	if err == nil {
+		return
+	}
+	log.Printf("gRPC close() failure: %s", err)
+}
+
+func (n Node) Link(link *letopb.TrackingLink) error {
+	conn, client, err := n.Connect()
+	if err != nil {
+		return err
+	}
+	defer closeAndLogError(conn)
+	_, err = client.Link(context.Background(), link)
+	return err
+}
+
+func (n Node) Unlink(link *letopb.TrackingLink) error {
+	conn, client, err := n.Connect()
+	if err != nil {
+		return err
+	}
+	defer closeAndLogError(conn)
+	_, err = client.Unlink(context.Background(), link)
+	return err
+}
+
+func (n Node) StartTracking(request *letopb.StartRequest) error {
+	conn, client, err := n.Connect()
+	if err != nil {
+		return err
+	}
+	defer closeAndLogError(conn)
+	_, err = client.StartTracking(context.Background(), request)
+	return err
+}
+
+func (n Node) StopTracking() error {
+	conn, client, err := n.Connect()
+	if err != nil {
+		return err
+	}
+	defer closeAndLogError(conn)
+	_, err = client.StopTracking(context.Background(), &letopb.Empty{})
+	return err
+}
+
+func (n Node) GetStatus() (*letopb.Status, error) {
+	conn, client, err := n.Connect()
+	if err != nil {
+		return nil, err
+	}
+	defer closeAndLogError(conn)
+	return client.GetStatus(context.Background(), &letopb.Empty{})
+}
+
+func (n Node) GetLastExperimentLog() (*letopb.ExperimentLog, error) {
+	conn, client, err := n.Connect()
+	if err != nil {
+		return nil, err
+	}
+	defer closeAndLogError(conn)
+	return client.GetLastExperimentLog(context.Background(), &letopb.Empty{})
 }
 
 func NewNodeLister() *NodeLister {

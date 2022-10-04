@@ -21,11 +21,13 @@ import (
 	"github.com/blang/semver"
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/leto"
+	"github.com/formicidae-tracker/leto/letopb"
 	"github.com/formicidae-tracker/olympus/olympuspb"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v2"
 )
 
@@ -52,7 +54,7 @@ type ArtemisManager struct {
 	workBalance      *WorkloadBalance
 	since            time.Time
 
-	lastExperimentLog *leto.ExperimentLog
+	lastExperimentLog *letopb.ExperimentLog
 }
 
 func NewArtemisManager() (*ArtemisManager, error) {
@@ -87,10 +89,10 @@ func NewArtemisManager() (*ArtemisManager, error) {
 	}, nil
 }
 
-func (m *ArtemisManager) Status() leto.Status {
+func (m *ArtemisManager) Status() *letopb.Status {
 	m.mx.Lock()
 	defer m.mx.Unlock()
-	res := leto.Status{
+	res := &letopb.Status{
 		Master:     m.nodeConfig.Master,
 		Slaves:     m.nodeConfig.Slaves,
 		Experiment: nil,
@@ -101,16 +103,16 @@ func (m *ArtemisManager) Status() leto.Status {
 		yamlConfig = []byte(fmt.Sprintf("Could not generate yaml config: %s", err))
 	}
 	if m.incoming != nil {
-		res.Experiment = &leto.ExperimentStatus{
+		res.Experiment = &letopb.ExperimentStatus{
 			ExperimentDir:     filepath.Base(m.experimentDir),
 			YamlConfiguration: string(yamlConfig),
-			Since:             m.since,
+			Since:             timestamppb.New(m.since),
 		}
 	}
 	return res
 }
 
-func (m *ArtemisManager) LastExperimentLog() *leto.ExperimentLog {
+func (m *ArtemisManager) LastExperimentLog() *letopb.ExperimentLog {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 	return m.lastExperimentLog
@@ -639,11 +641,15 @@ func (m *ArtemisManager) startSlavesTrackers() {
 
 		slaveConfig := *m.experimentConfig
 		slaveConfig.Loads.SelfUUID = slaveConfig.Loads.UUIDs[slaveName]
-		resp := leto.Response{}
-		err := slave.RunMethod("Leto.StartTracking", &slaveConfig, &resp)
-		if err == nil {
-			err = resp.ToError()
+		asYaml, err := slaveConfig.Yaml()
+		if err != nil {
+			m.logger.Printf("Could not serialize slave %s config: %s", slaveName, err)
 		}
+
+		err = slave.StartTracking(&letopb.StartRequest{
+			YamlConfiguration: string(asYaml),
+		})
+
 		if err != nil {
 			m.logger.Printf("Could not start slave %s: %s", slaveName, err)
 		}
@@ -664,11 +670,7 @@ func (m *ArtemisManager) stopSlavesTrackers() {
 			m.logger.Printf("Could not find slave '%s', not stopping it", slaveName)
 			continue
 		}
-		resp := leto.Response{}
-		err := slave.RunMethod("Leto.StopTracking", &leto.NoArgs{}, &resp)
-		if err == nil {
-			err = resp.ToError()
-		}
+		err := slave.StopTracking()
 		if err != nil {
 			m.logger.Printf("Could not stop slave %s: %s", slaveName, err)
 		}
@@ -880,7 +882,7 @@ func (m *ArtemisManager) onTrackerAccept() func(c net.Conn) {
 func newExperimentLog(hasError bool,
 	startTime time.Time,
 	experimentConfig *leto.TrackingConfiguration,
-	experimentDir string) *leto.ExperimentLog {
+	experimentDir string) *letopb.ExperimentLog {
 
 	endTime := time.Now()
 
@@ -902,11 +904,11 @@ func newExperimentLog(hasError bool,
 		yamlConfig = []byte(fmt.Sprintf("Could not generate yaml config: %s", err))
 	}
 
-	return &leto.ExperimentLog{
+	return &letopb.ExperimentLog{
 		HasError:          hasError,
 		ExperimentDir:     filepath.Base(experimentDir),
-		Start:             startTime,
-		End:               endTime,
+		Start:             timestamppb.New(startTime),
+		End:               timestamppb.New(endTime),
 		YamlConfiguration: string(yamlConfig),
 		Log:               string(log),
 		Stderr:            string(stderr),
