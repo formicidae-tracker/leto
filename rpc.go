@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+//go:generate protoc --experimental_allow_proto3_optional --go_out=letopb --go-grpc_out=letopb letopb/leto_service.proto
+
 type Response struct {
 	Error string
 }
@@ -40,19 +42,14 @@ func (r Response) ToError() error {
 	return errors.New(r.Error)
 }
 
-type SlaveTrackingStart struct {
-	Stride int
-	IDs    []int
-	Remote string
-	UUID   string
-}
+// type SlaveTrackingStart struct {
+// 	Stride int
+// 	IDs    []int
+// 	Remote string
+// 	UUID   string
+// }
 
 type Link struct {
-	Master string
-	Slave  string
-}
-
-type Unlink struct {
 	Master string
 	Slave  string
 }

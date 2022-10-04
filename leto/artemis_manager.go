@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
-	"net/rpc"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +21,11 @@ import (
 	"github.com/blang/semver"
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/leto"
+	"github.com/formicidae-tracker/olympus/olympuspb"
+
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"gopkg.in/yaml.v2"
 )
 
@@ -37,6 +42,8 @@ type ArtemisManager struct {
 	streamIn      *io.PipeReader
 	streamManager *StreamManager
 	testMode      bool
+
+	stopRegistration, registrationEnded chan struct{}
 
 	experimentDir string
 	logger        *log.Logger
@@ -953,68 +960,178 @@ func (m *ArtemisManager) LoadFromPersistentFile() {
 	}
 }
 
-func (m *ArtemisManager) timeoutGuard(f func() error, errPrefix string, d time.Duration) {
-	errors := make(chan error, 1)
-	go func() { errors <- f() }()
-	select {
-	case err := <-errors:
-		if err != nil {
-			m.logger.Printf("%s: %s", errPrefix, err)
-		}
-	case <-time.After(5 * time.Second):
-		m.logger.Printf("%s: TIMEOUTED", errPrefix)
-	}
-}
-
 func (m *ArtemisManager) registerOlympus() {
-	m.timeoutGuard(m.registerOlympusError, "Could not register tracking to olympus: %s", 5*time.Second)
+	if err := m.registerOlympusE(); err != nil {
+		m.logger.Printf("olympus registration failure: %s", err)
+	}
 }
 
 func (m *ArtemisManager) unregisterOlympus() {
-	m.timeoutGuard(m.unregisterOlympusError, "Could not unregister tracking to olympus: %s", 5*time.Second)
+	if err := m.unregisterOlympusE(); err != nil {
+		m.logger.Printf("olympus unregistration failure: %s", err)
+	}
 }
 
-func (m *ArtemisManager) registerOlympusError() error {
+func (m *ArtemisManager) registerOlympusE() (err error) {
+	defer func() {
+		if err == nil {
+			return
+		}
+		m.stopRegistration = nil
+		m.registrationEnded = nil
+	}()
+
+	if m.stopRegistration != nil || m.registrationEnded != nil {
+		return errors.New("registration loop already started")
+	}
+	m.stopRegistration = make(chan struct{})
+	m.registrationEnded = make(chan struct{})
 	olympusHost := m.experimentConfig.Stream.Host
 	if olympusHost == nil || len(*olympusHost) == 0 {
-		return nil
+		return errors.New("no olympus host defined in configuration")
 	}
 
 	hostname, err := os.Hostname()
 	if err != nil {
-		return err
+		return fmt.Errorf("could not get hostname: %w", err)
 	}
-	m.logger.Printf("registering tracking to %s", *olympusHost)
-	c, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", *olympusHost, 3001))
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-	unused := 0
-	m.logger.Printf("connected to %s", *olympusHost)
+	m.logger.Printf("registring tracking to %s", *olympusHost)
 
-	return c.Call("Olympus.RegisterTracker", leto.RegisterTrackerArgs{
+	declaration := &olympuspb.TrackingDeclaration{
 		Hostname:       hostname,
-		StreamServer:   *olympusHost,
 		ExperimentName: m.experimentConfig.ExperimentName,
-	}, &unused)
+		StreamServer:   *olympusHost,
+	}
+
+	go m.registrationLoop(m.stopRegistration,
+		m.registrationEnded,
+		fmt.Sprintf("%s:%d", *olympusHost, 3001),
+		declaration)
+	return nil
 }
 
-func (m *ArtemisManager) unregisterOlympusError() error {
-	olympusHost := m.experimentConfig.Stream.Host
-	if olympusHost == nil || len(*olympusHost) == 0 {
-		return nil
+func (m *ArtemisManager) unregisterOlympusE() error {
+	if m.registrationEnded == nil {
+		return errors.New("already unregistered")
 	}
-	hostname, err := os.Hostname()
+	close(m.stopRegistration)
+	<-m.registrationEnded
+	m.stopRegistration = nil
+	m.registrationEnded = nil
+	return nil
+}
+
+type connection struct {
+	conn   *grpc.ClientConn
+	stream olympuspb.Olympus_TrackingClient
+}
+
+func (c *connection) closeAndLogError(logger *log.Logger) {
+	if c.stream != nil {
+		err := c.stream.CloseSend()
+		if err != nil {
+			logger.Printf("gRPC CloseSend() failure: %s", err)
+		}
+	}
+	c.stream = nil
+	if c.conn != nil {
+		err := c.conn.Close()
+		if err != nil {
+			logger.Printf("gRPC close() failure: %s", err)
+		}
+	}
+	c.conn = nil
+}
+
+func (m *ArtemisManager) connect(address string, declaration *olympuspb.TrackingDeclaration) (res connection, err error) {
+	defer func() {
+		if err == nil {
+			return
+		}
+		res.closeAndLogError(m.logger)
+	}()
+	dialOptions := append(olympuspb.DefaultDialOptions,
+		grpc.WithConnectParams(
+			grpc.ConnectParams{
+				MinConnectTimeout: 20 * time.Second,
+				Backoff: backoff.Config{
+					BaseDelay:  500 * time.Millisecond,
+					Multiplier: backoff.DefaultConfig.Multiplier,
+					Jitter:     backoff.DefaultConfig.Jitter,
+					MaxDelay:   2 * time.Second,
+				},
+			}))
+	res.conn, err = grpc.Dial(address, dialOptions...)
 	if err != nil {
-		return err
+		return
 	}
-	m.logger.Printf("unregistering tracking to %s", *olympusHost)
-	c, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", *olympusHost, 3001))
+
+	client := olympuspb.NewOlympusClient(res.conn)
+
+	res.stream, err = client.Tracking(context.Background(), olympuspb.DefaultCallOptions...)
 	if err != nil {
-		return err
+		return
 	}
-	defer c.Close()
-	unused := 0
-	return c.Call("Olympus.UnregisterTracker", hostname, &unused)
+	err = res.stream.Send(&olympuspb.TrackingUpStream{
+		Declaration: declaration,
+	})
+	if err != nil {
+		return
+	}
+	_, err = res.stream.Recv()
+	return
+}
+
+func (m *ArtemisManager) connectAsync(address string, declaration *olympuspb.TrackingDeclaration) (<-chan connection, <-chan error) {
+	errors := make(chan error)
+	res := make(chan connection)
+	go func() {
+		conn, err := m.connect(address, declaration)
+		if err != nil {
+			errors <- err
+		} else {
+			res <- conn
+		}
+		close(res)
+		close(errors)
+
+	}()
+	return res, errors
+}
+
+func (m *ArtemisManager) registrationLoop(quit <-chan struct{},
+	finished chan<- struct{},
+	address string,
+	declaration *olympuspb.TrackingDeclaration) {
+
+	defer close(finished)
+
+	var conn connection
+	defer conn.closeAndLogError(m.logger)
+	conns, errors := m.connectAsync(address, declaration)
+
+	for {
+		if conn.stream == nil && errors == nil && conns == nil {
+			conn.closeAndLogError(m.logger)
+			time.Sleep(500 * time.Millisecond)
+			m.logger.Printf("reconnection to %s", address)
+			conns, errors = m.connectAsync(address, declaration)
+		}
+		select {
+		case err, ok := <-errors:
+			if ok == false {
+				errors = nil
+			} else {
+				m.logger.Printf("gRPC connect failure: %s", err)
+			}
+		case newConn, ok := <-conns:
+			if ok == false {
+				conns = nil
+			} else {
+				conn = newConn
+			}
+		case <-quit:
+			return
+		}
+	}
 }

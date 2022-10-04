@@ -253,16 +253,19 @@ func (c *TrackingConfiguration) CheckAllFieldAreSet() error {
 	return CheckNoNilField(reflect.ValueOf(*c))
 }
 
+func ParseConfiguration(content []byte) (*TrackingConfiguration, error) {
+	res := &TrackingConfiguration{}
+	err := yaml.Unmarshal(content, res)
+
+	return res, err
+}
+
 func ReadConfiguration(filename string) (*TrackingConfiguration, error) {
-	txt, err := ioutil.ReadFile(filename)
+	content, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("Could not read '%s': %s", filename, err)
 	}
-
-	res := &TrackingConfiguration{}
-	err = yaml.Unmarshal(txt, res)
-
-	return res, err
+	return ParseConfiguration(content)
 }
 
 func (c *TrackingConfiguration) Yaml() ([]byte, error) {
