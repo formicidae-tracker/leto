@@ -4,19 +4,16 @@ leto: *.go letopb/*.go letopb/*.proto
 	go generate
 	go build
 
-
-
 check:
 	go test
 	go vet
 	make -C leto check
 	make -C leto-cli check
 
-
-leto/leto: *.go letopb/*.proto letopb/*.go
+leto/leto: *.go letopb/*.proto letopb/*.go leto/*.go
 	make -C leto
 
-leto-cli/leto-cli: *.go letopb/*.go letopb/*.proto
+leto-cli/leto-cli: *.go letopb/*.go letopb/*.proto leto-cli/*.go
 	make -C leto-cli
 
 clean:
