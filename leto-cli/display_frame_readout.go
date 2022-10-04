@@ -71,7 +71,7 @@ func (c *DisplayFrameReadoutCommand) Execute(args []string) error {
 	}
 
 	go func() {
-		sigint := make(chan os.Signal)
+		sigint := make(chan os.Signal, 1)
 		signal.Notify(sigint, os.Interrupt)
 		<-sigint
 		conn.Close()
@@ -93,7 +93,6 @@ func (c *DisplayFrameReadoutCommand) Execute(args []string) error {
 		}
 	}
 
-	return nil
 }
 
 func init() {
