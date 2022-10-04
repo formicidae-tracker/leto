@@ -144,6 +144,7 @@ func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout,
 	timeout := time.Duration(2*wb.Stride+2) * betweenFrame
 
 	logger := log.New(os.Stderr, "[FrameReadoutMerger] ", 0)
+	logger.Printf("next frame timeout: %s", timeout)
 	for {
 		var timer *time.Timer = nil
 		var timeoutC <-chan time.Time = nil
@@ -153,36 +154,36 @@ func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout,
 		}
 		var now time.Time
 		select {
-		case i, ok := <-inbound:
+		case frame, ok := <-inbound:
 			if ok == false {
 				return nil
 			}
-			if i.FrameID > maxFrame {
-				maxFrame = i.FrameID
+			if frame.FrameID > maxFrame {
+				maxFrame = frame.FrameID
 			}
 
-			_, err := wb.CheckFrame(i)
+			_, err := wb.CheckFrame(frame)
 			if err != nil {
 				logger.Printf("%s", err)
 				continue
 			}
 			now = time.Now()
 			if len(deadlines) == 0 {
-				nextFrameToSend = i.FrameID
-				for i := 0; i < wb.Stride; i++ {
+				nextFrameToSend = frame.FrameID
+				for i := 1; i <= wb.Stride; i++ {
 					deadlines[nextFrameToSend+int64(i)] = now.Add(time.Duration(i) * betweenFrame).Add(timeout)
 				}
 			}
-			if i.FrameID < nextFrameToSend {
+			if frame.FrameID < nextFrameToSend {
 				//we already timeouted the frame
-				logger.Printf("Received frame %d, but already sent a timeout", i.FrameID)
+				logger.Printf("Received frame %d, but already sent a timeout", frame.FrameID)
 				continue
 			}
-			delete(deadlines, i.FrameID)
-			deadlines[i.FrameID+int64(wb.Stride)] = now.Add(timeout)
+			delete(deadlines, frame.FrameID)
+			deadlines[frame.FrameID+int64(wb.Stride)] = now.Add(timeout)
 			//log.Printf("received now:%s frame:%#v , deadlines:%#v", now, i, deadlines)
-			i.ProducerUuid = ""
-			buffer = append(buffer, i)
+			frame.ProducerUuid = ""
+			buffer = append(buffer, frame)
 
 		case t := <-timeoutC:
 			now = t
@@ -215,11 +216,7 @@ func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout,
 		sort.Sort(buffer)
 
 		//send all frames that we have received or timeouted
-		for {
-			if len(buffer) == 0 {
-				//we are done !!!
-				break
-			}
+		for len(buffer) > 0 {
 			if buffer[0].FrameID < nextFrameToSend {
 				logger.Printf("Inconsistent state, next frame is %d, and has %d buffered", nextFrameToSend, buffer[0].FrameID)
 				buffer = buffer[1:]

@@ -14,325 +14,73 @@ type FrameReadoutMergerSuite struct{}
 var _ = Suite(&FrameReadoutMergerSuite{})
 
 func (s *FrameReadoutMergerSuite) TestEnd2End(c *C) {
-	testdata := []struct {
-		T  time.Duration
-		TS int64
-		R  *hermes.FrameReadout
-	}{
-		{
-			T:  0 * time.Microsecond,
-			TS: 1000,
-			R: &hermes.FrameReadout{
-				FrameID:      0,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
-		{
-			T:  9 * time.Microsecond,
-			TS: 509,
-			R: &hermes.FrameReadout{
-				FrameID:      1,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  21 * time.Microsecond,
-			TS: 1021,
-			R: &hermes.FrameReadout{
-				FrameID:      2,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
-		{
-			T:  29 * time.Microsecond,
-			TS: 529,
-			R: &hermes.FrameReadout{
-				FrameID:      3,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  47 * time.Microsecond,
-			TS: 547,
-			R: &hermes.FrameReadout{
-				FrameID:      5,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  49 * time.Microsecond,
-			TS: 1049,
-			R: &hermes.FrameReadout{
-				FrameID:      4,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
-		{
-			T:  69 * time.Microsecond,
-			TS: 569,
-			R: &hermes.FrameReadout{
-				FrameID:      7,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  90 * time.Microsecond,
-			TS: 590,
-			R: &hermes.FrameReadout{
-				FrameID:      9,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  100 * time.Microsecond,
-			TS: 1100,
-			R: &hermes.FrameReadout{
-				FrameID:      10,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
-		{
-			T:  110 * time.Microsecond,
-			TS: 610,
-			R: &hermes.FrameReadout{
-				FrameID:      11,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  120 * time.Microsecond,
-			TS: 1120,
-			R: &hermes.FrameReadout{
-				FrameID:      12,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
-		{
-			T:  130 * time.Microsecond,
-			TS: 630,
-			R: &hermes.FrameReadout{
-				FrameID:      13,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  140 * time.Microsecond,
-			TS: 1140,
-			R: &hermes.FrameReadout{
-				FrameID:      14,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
-		{
-			T:  150 * time.Microsecond,
-			TS: 650,
-			R: &hermes.FrameReadout{
-				FrameID:      15,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  160 * time.Microsecond,
-			TS: 1160,
-			R: &hermes.FrameReadout{
-				FrameID:      16,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
-		{
-			T:  170 * time.Microsecond,
-			TS: 670,
-			R: &hermes.FrameReadout{
-				FrameID:      17,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  180 * time.Microsecond,
-			TS: 1180,
-			R: &hermes.FrameReadout{
-				FrameID:      18,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
-		{
-			T:  190 * time.Microsecond,
-			TS: 690,
-			R: &hermes.FrameReadout{
-				FrameID:      19,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "bar",
-			},
-		},
-		{
-			T:  191 * time.Microsecond,
-			TS: 1191,
-			R: &hermes.FrameReadout{
-				FrameID:      6,
-				Error:        hermes.FrameReadout_NO_ERROR,
-				ProducerUuid: "foo",
-			},
-		},
+	fps := 1000.0
+	period := time.Duration(float64(time.Second.Nanoseconds()) / fps)
+	baseTimeStamp := map[string]int64{
+		"foo": 1000,
+		"bar": 500,
 	}
 
-	expected := []*hermes.FrameReadout{
-		{
-			FrameID:      0,
-			Timestamp:    1000,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      1,
-			Timestamp:    1009,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      2,
-			Timestamp:    1021,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      3,
-			Timestamp:    1029,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      4,
-			Timestamp:    1049,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      5,
-			Timestamp:    1047,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      6,
-			Timestamp:    0,
-			Error:        hermes.FrameReadout_PROCESS_TIMEOUT,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      7,
-			Timestamp:    1069,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      8,
-			Timestamp:    0,
-			Error:        hermes.FrameReadout_PROCESS_TIMEOUT,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      9,
-			Timestamp:    1090,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      10,
-			Timestamp:    1100,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      11,
-			Timestamp:    1110,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      12,
-			Timestamp:    1120,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      13,
-			Timestamp:    1130,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      14,
-			Timestamp:    1140,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      15,
-			Timestamp:    1150,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      16,
-			Timestamp:    1160,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      17,
-			Timestamp:    1170,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      18,
-			Timestamp:    1180,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
-		{
-			FrameID:      19,
-			Timestamp:    1190,
-			Error:        hermes.FrameReadout_NO_ERROR,
-			ProducerUuid: "",
-		},
+	jitters := map[int64]time.Duration{
+		1:  -1 * time.Microsecond,
+		2:  1 * time.Microsecond,
+		3:  -1 * time.Microsecond,
+		5:  -3 * time.Microsecond,
+		4:  -1 * time.Microsecond,
+		7:  -1 * time.Microsecond,
+		9:  1 * time.Microsecond,
+		12: 2 * time.Microsecond,
+		6:  3 * time.Microsecond,
 	}
+	frameIDs := []int64{0, 1, 2, 3, 5, 4, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 6}
 
-	inbound := make(chan *hermes.FrameReadout, 100)
-	outbound := make(chan *hermes.FrameReadout, len(testdata))
+	expected := make([]*hermes.FrameReadout, len(frameIDs)+1)
+	for i := range expected {
+
+		jitter, _ := jitters[int64(i)]
+		expected[i] = &hermes.FrameReadout{
+			FrameID:   int64(i),
+			Timestamp: int64(1000) + int64(i)*period.Microseconds() + jitter.Microseconds(),
+			Error:     hermes.FrameReadout_NO_ERROR,
+		}
+	}
+	expected[6].Error = hermes.FrameReadout_PROCESS_TIMEOUT
+	expected[6].Timestamp = 0
+	expected[8].Error = hermes.FrameReadout_PROCESS_TIMEOUT
+	expected[8].Timestamp = 0
+
+	inbound := make(chan *hermes.FrameReadout, len(frameIDs))
+	outbound := make(chan *hermes.FrameReadout, len(frameIDs))
 
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
 		start := time.Now()
-		for _, d := range testdata {
-			time.Sleep(start.Add(d.T).Sub(time.Now()))
-			d.R.Time, _ = ptypes.TimestampProto(start.Add(d.T))
-			d.R.Timestamp = d.TS
-			inbound <- d.R
+		for _, ID := range frameIDs {
+			producerUuid := "foo"
+			if ID%2 == 1 {
+				producerUuid = "bar"
+			}
+			jitter, _ := jitters[ID]
+			delta := time.Duration(ID)*period + jitter
+			deadline := start.Add(delta)
+			ts := baseTimeStamp[producerUuid] + int64(delta.Microseconds())
+			frame := &hermes.FrameReadout{
+				FrameID:      ID,
+				Error:        hermes.FrameReadout_NO_ERROR,
+				ProducerUuid: producerUuid,
+				Timestamp:    ts,
+			}
+			frame.Time, _ = ptypes.TimestampProto(deadline)
+
+			time.Sleep(deadline.Sub(time.Now()))
+			inbound <- frame
 		}
 		close(inbound)
 		wg.Done()
 	}()
 	wb := &WorkloadBalance{
-		FPS:        10000.0,
+		FPS:        fps,
 		Stride:     2,
 		MasterUUID: "foo",
 		IDsByUUID: map[string][]bool{
