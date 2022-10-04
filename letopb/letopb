@@ -1,0 +1,7 @@
+  /home/atuleu/devel/github.com/formicidae-tracker/leto/letopb:
+  total used in directory 12 available 761.3 GiB
+  drwxrwxr-x 2 atuleu atuleu 4096 Oct  4 16:05 .
+  drwxrwxr-x 8 atuleu atuleu 4096 Oct  4 16:05 ..
+  -rw-rw-r-- 1 atuleu atuleu   15 Oct  4 16:05 defaults.go
+  -rw-rw-r-- 1 atuleu atuleu    0 Oct  4 16:05 default.go~
+  -rw-rw-r-- 1 atuleu atuleu    0 Oct  4 16:05 leto_service.proto

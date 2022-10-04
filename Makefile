@@ -1,19 +1,22 @@
-VERSION := $(shell git describe)
-LDFLAGS :=-ldflags "-X 'github.com/formicidae-tracker/leto.LETO_VERSION=$(VERSION)'"
+all: leto leto/leto leto-cli/leto-cli
 
-all: check-main leto/leto leto-cli/leto-cli
+leto: *.go letopb/*.go letopb/*.proto
+	go generate
+	go build
+	go test
+	go vet
 
 check-main:
 	go test
 
-leto/leto: *.go leto/*.go
-	cd leto && go build $(LDFLAGS)
+leto/leto: leto
+	make -C leto
 
-leto-cli/leto-cli: *.go leto-cli/*.go
-	cd leto-cli && go build $(LDFLAGS)
+leto-cli/leto-cli: leto
+	make -C leto-cli
 
 clean:
-	rm -f leto/leto
-	rm -f leto-cli/leto-cli
+	make -C leto clean
+	make -C leto-cli clean
 
-.PHONY: clean
+.PHONY: clean leto
