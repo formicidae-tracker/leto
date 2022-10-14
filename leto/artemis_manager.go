@@ -45,7 +45,8 @@ type ArtemisManager struct {
 	streamManager *StreamManager
 	testMode      bool
 
-	stopRegistration, registrationEnded chan struct{}
+	stopRegistration  func()
+	registrationEnded chan struct{}
 
 	experimentDir string
 	logger        *log.Logger
@@ -979,15 +980,13 @@ func (m *ArtemisManager) registerOlympusE() (err error) {
 		if err == nil {
 			return
 		}
-		m.stopRegistration = nil
+		m.stopRegistration = func() {}
 		m.registrationEnded = nil
 	}()
 
 	if m.stopRegistration != nil || m.registrationEnded != nil {
 		return errors.New("registration loop already started")
 	}
-	m.stopRegistration = make(chan struct{})
-	m.registrationEnded = make(chan struct{})
 	olympusHost := m.experimentConfig.Stream.Host
 	if olympusHost == nil || len(*olympusHost) == 0 {
 		return errors.New("no olympus host defined in configuration")
@@ -999,13 +998,17 @@ func (m *ArtemisManager) registerOlympusE() (err error) {
 	}
 	m.logger.Printf("registring tracking to %s", *olympusHost)
 
+	var c context.Context
+	c, m.stopRegistration = context.WithCancel(context.Background())
+	m.registrationEnded = make(chan struct{})
+
 	declaration := &olympuspb.TrackingDeclaration{
 		Hostname:       hostname,
 		ExperimentName: m.experimentConfig.ExperimentName,
 		StreamServer:   *olympusHost,
 	}
 
-	go m.registrationLoop(m.stopRegistration,
+	go m.registrationLoop(c,
 		m.registrationEnded,
 		fmt.Sprintf("%s:%d", *olympusHost, 3001),
 		declaration)
@@ -1016,9 +1019,9 @@ func (m *ArtemisManager) unregisterOlympusE() error {
 	if m.registrationEnded == nil {
 		return errors.New("already unregistered")
 	}
-	close(m.stopRegistration)
+	m.stopRegistration()
 	<-m.registrationEnded
-	m.stopRegistration = nil
+	m.stopRegistration = func() {}
 	m.registrationEnded = nil
 	return nil
 }
@@ -1090,9 +1093,18 @@ func (m *ArtemisManager) connectAsync(address string, declaration *olympuspb.Tra
 	go func() {
 		conn, err := m.connect(address, declaration)
 		if err != nil {
-			errors <- err
+			select {
+			case errors <- err:
+			default:
+				m.logger.Printf("gRPC connection failed after shutdown: %s", err)
+			}
 		} else {
-			res <- conn
+			select {
+			case res <- conn:
+			default:
+				m.logger.Printf("gRPC connection established after shutdown")
+				conn.closeAndLogError(m.logger)
+			}
 		}
 		close(res)
 		close(errors)
@@ -1101,7 +1113,7 @@ func (m *ArtemisManager) connectAsync(address string, declaration *olympuspb.Tra
 	return res, errors
 }
 
-func (m *ArtemisManager) registrationLoop(quit <-chan struct{},
+func (m *ArtemisManager) registrationLoop(c context.Context,
 	finished chan<- struct{},
 	address string,
 	declaration *olympuspb.TrackingDeclaration) {
@@ -1110,29 +1122,29 @@ func (m *ArtemisManager) registrationLoop(quit <-chan struct{},
 
 	var conn connection
 	defer conn.closeAndLogError(m.logger)
-	conns, errors := m.connectAsync(address, declaration)
+	connections, connErrors := m.connectAsync(address, declaration)
 
 	for {
-		if conn.stream == nil && errors == nil && conns == nil {
+		if conn.stream == nil && connErrors == nil && connections == nil {
 			conn.closeAndLogError(m.logger)
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(2 * time.Second)
 			m.logger.Printf("reconnection to %s", address)
-			conns, errors = m.connectAsync(address, declaration)
+			connections, connErrors = m.connectAsync(address, declaration)
 		}
 		select {
-		case err, ok := <-errors:
+		case err, ok := <-connErrors:
 			if ok == false {
-				errors = nil
+				connErrors = nil
 			} else {
 				m.logger.Printf("gRPC connect failure: %s", err)
 			}
-		case newConn, ok := <-conns:
+		case newConn, ok := <-connections:
 			if ok == false {
-				conns = nil
+				connections = nil
 			} else {
 				conn = newConn
 			}
-		case <-quit:
+		case <-c.Done():
 			return
 		}
 	}
