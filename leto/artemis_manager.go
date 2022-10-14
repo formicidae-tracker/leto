@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -1026,36 +1027,19 @@ func (m *ArtemisManager) unregisterOlympusE() error {
 	return nil
 }
 
-type connection struct {
-	conn   *grpc.ClientConn
-	stream olympuspb.Olympus_TrackingClient
-}
+func (m *ArtemisManager) registrationLoop(c context.Context,
+	finished chan<- struct{},
+	address string,
+	declaration *olympuspb.TrackingDeclaration) {
 
-func (c *connection) closeAndLogError(logger *log.Logger) {
-	if c.stream != nil {
-		err := c.stream.CloseSend()
-		if err != nil {
-			logger.Printf("gRPC CloseSend() failure: %s", err)
-		}
-	}
-	c.stream = nil
-	if c.conn != nil {
-		err := c.conn.Close()
-		if err != nil {
-			logger.Printf("gRPC close() failure: %s", err)
-		}
-	}
-	c.conn = nil
-}
+	defer close(finished)
 
-func (m *ArtemisManager) connect(address string, declaration *olympuspb.TrackingDeclaration) (res connection, err error) {
+	conn := &olympuspb.TrackingConnection{}
 	defer func() {
-		if err == nil {
-			return
-		}
-		res.closeAndLogError(m.logger)
+		conn.CloseAll(m.logger)
 	}()
-	dialOptions := append(olympuspb.DefaultDialOptions,
+
+	dialOptions := []grpc.DialOption{
 		grpc.WithConnectParams(
 			grpc.ConnectParams{
 				MinConnectTimeout: 20 * time.Second,
@@ -1065,78 +1049,31 @@ func (m *ArtemisManager) connect(address string, declaration *olympuspb.Tracking
 					Jitter:     backoff.DefaultConfig.Jitter,
 					MaxDelay:   2 * time.Second,
 				},
-			}))
-	res.conn, err = grpc.Dial(address, dialOptions...)
-	if err != nil {
-		return
+			}),
 	}
-
-	client := olympuspb.NewOlympusClient(res.conn)
-
-	res.stream, err = client.Tracking(context.Background(), olympuspb.DefaultCallOptions...)
-	if err != nil {
-		return
-	}
-	err = res.stream.Send(&olympuspb.TrackingUpStream{
-		Declaration: declaration,
-	})
-	if err != nil {
-		return
-	}
-	_, err = res.stream.Recv()
-	return
-}
-
-func (m *ArtemisManager) connectAsync(address string, declaration *olympuspb.TrackingDeclaration) (<-chan connection, <-chan error) {
-	errors := make(chan error)
-	res := make(chan connection)
-	go func() {
-		conn, err := m.connect(address, declaration)
-		if err != nil {
-			select {
-			case errors <- err:
-			default:
-				m.logger.Printf("gRPC connection failed after shutdown: %s", err)
-			}
-		} else {
-			select {
-			case res <- conn:
-			default:
-				m.logger.Printf("gRPC connection established after shutdown")
-				conn.closeAndLogError(m.logger)
-			}
-		}
-		close(res)
-		close(errors)
-
-	}()
-	return res, errors
-}
-
-func (m *ArtemisManager) registrationLoop(c context.Context,
-	finished chan<- struct{},
-	address string,
-	declaration *olympuspb.TrackingDeclaration) {
-
-	defer close(finished)
-
-	var conn connection
-	defer conn.closeAndLogError(m.logger)
-	connections, connErrors := m.connectAsync(address, declaration)
+	connections, connErrors := olympuspb.ConnectTrackingAsync(nil,
+		address,
+		declaration,
+		m.logger,
+		dialOptions...)
 
 	for {
-		if conn.stream == nil && connErrors == nil && connections == nil {
-			conn.closeAndLogError(m.logger)
-			time.Sleep(2 * time.Second)
+		if conn.Established() == false && connErrors == nil && connections == nil {
+			conn.CloseAll(m.logger)
+			time.Sleep(time.Duration(float64(2*time.Second) * (1.0 + 0.2*rand.Float64())))
 			m.logger.Printf("reconnection to %s", address)
-			connections, connErrors = m.connectAsync(address, declaration)
+			connections, connErrors = olympuspb.ConnectTrackingAsync(nil,
+				address,
+				declaration,
+				m.logger,
+				dialOptions...)
 		}
 		select {
 		case err, ok := <-connErrors:
 			if ok == false {
 				connErrors = nil
 			} else {
-				m.logger.Printf("gRPC connect failure: %s", err)
+				m.logger.Printf("gRPC connection failure: %s", err)
 			}
 		case newConn, ok := <-connections:
 			if ok == false {
