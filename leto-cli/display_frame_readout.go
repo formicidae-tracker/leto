@@ -53,7 +53,7 @@ func (c *DisplayFrameReadoutCommand) Execute(args []string) error {
 		return fmt.Errorf("'%s' is not running", n.Name)
 	}
 
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", n.Address, leto.ARTEMIS_OUT_PORT))
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", n.Address, leto.DefaultConfig.HermesBroadcastPort))
 	if err != nil {
 		return fmt.Errorf("Could not connect to '%s': %s", n.Name, err)
 	}

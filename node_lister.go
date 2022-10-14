@@ -186,5 +186,4 @@ func (n *NodeLister) ListNodes() (map[string]Node, error) {
 	n.save()
 
 	return res, nil
-
 }

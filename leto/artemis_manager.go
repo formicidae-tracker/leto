@@ -57,9 +57,10 @@ type ArtemisManager struct {
 	since            time.Time
 
 	lastExperimentLog *letopb.ExperimentLog
+	letoConfig        leto.Config
 }
 
-func NewArtemisManager() (*ArtemisManager, error) {
+func NewArtemisManager(letoConfig leto.Config) (*ArtemisManager, error) {
 	cmd := exec.Command("artemis", "--version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -88,6 +89,7 @@ func NewArtemisManager() (*ArtemisManager, error) {
 	return &ArtemisManager{
 		nodeConfig: nodeConfig,
 		logger:     log.New(os.Stderr, "[artemis] ", 0),
+		letoConfig: letoConfig,
 	}, nil
 }
 
@@ -587,7 +589,7 @@ func (m *ArtemisManager) spawnFrameReadoutDispatchTask() {
 func (m *ArtemisManager) spawnTrackerListenTask() {
 	m.trackerWg.Add(1)
 	go func() {
-		err := m.trackers.Listen(fmt.Sprintf(":%d", leto.ARTEMIS_IN_PORT), m.onTrackerAccept(), func() {
+		err := m.trackers.Listen(fmt.Sprintf(":%d", m.letoConfig.ArtemisIncomingPort), m.onTrackerAccept(), func() {
 			m.logger.Printf("All connection closed, cleaning up experiment")
 		})
 		if err != nil {
@@ -600,7 +602,7 @@ func (m *ArtemisManager) spawnTrackerListenTask() {
 func (m *ArtemisManager) spawnFrameReadoutBroadCastTask() {
 	m.wg.Add(1)
 	go func() {
-		BroadcastFrameReadout(fmt.Sprintf(":%d", leto.ARTEMIS_OUT_PORT),
+		BroadcastFrameReadout(fmt.Sprintf(":%d", m.letoConfig.HermesBroadcastPort),
 			m.broadcast,
 			3*time.Duration(1.0e6/(*m.experimentConfig.Camera.FPS))*time.Microsecond)
 		m.wg.Done()
@@ -796,7 +798,7 @@ func (m *ArtemisManager) buildTrackingCommand() *exec.Cmd {
 		args = append(args, "--test-mode")
 	}
 	args = append(args, "--host", targetHost)
-	args = append(args, "--port", fmt.Sprintf("%d", leto.ARTEMIS_IN_PORT))
+	args = append(args, "--port", fmt.Sprintf("%d", m.letoConfig.ArtemisIncomingPort))
 	args = append(args, "--uuid", m.experimentConfig.Loads.SelfUUID)
 
 	if *m.experimentConfig.Threads > 0 {
@@ -1011,7 +1013,7 @@ func (m *ArtemisManager) registerOlympusE() (err error) {
 
 	go m.registrationLoop(c,
 		m.registrationEnded,
-		fmt.Sprintf("%s:%d", *olympusHost, 3001),
+		fmt.Sprintf("%s:%d", *olympusHost, m.letoConfig.OlympusPort),
 		declaration)
 	return nil
 }
