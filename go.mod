@@ -10,11 +10,9 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/grandcat/zeroconf v0.0.0-20190424104450-85eadb44205c
 	github.com/jessevdk/go-flags v1.4.0
-	github.com/miekg/dns v1.1.10 // indirect
+	github.com/miekg/dns v1.1.25 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/stretchr/testify v1.7.0 // indirect
-	golang.org/x/net v0.0.0-20190620200207-3b0461eec859 // indirect
-	golang.org/x/sync v0.0.0-20190423024810-112230192c58 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/yaml.v2 v2.2.2
 )
