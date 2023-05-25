@@ -23,7 +23,7 @@ import (
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/letopb"
-	"github.com/formicidae-tracker/olympus/olympuspb"
+	olympuspb "github.com/formicidae-tracker/olympus/api"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
