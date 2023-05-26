@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"io"
 
 	"github.com/formicidae-tracker/hermes"
 )
 
-func FrameReadoutReadAll(stream io.Reader, C chan<- *hermes.FrameReadout, E chan<- error) {
+func FrameReadoutReadAll(ctx context.Context,
+	stream io.Reader,
+	readouts chan<- *hermes.FrameReadout,
+	errors chan<- error) {
 	defer func() {
-		//Do not close C, it is shared by many connections, its a global
-		close(E)
+		//Do not close readouts, it is shared by many connections.
+		close(errors)
 	}()
 
 	for {
@@ -19,10 +23,18 @@ func FrameReadoutReadAll(stream io.Reader, C chan<- *hermes.FrameReadout, E chan
 			if err == io.EOF {
 				return
 			}
-			E <- err
+			select {
+			case errors <- err:
+			case <-ctx.Done():
+				return
+			}
 		}
 		if ok == true {
-			C <- m
+			select {
+			case readouts <- m:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 }

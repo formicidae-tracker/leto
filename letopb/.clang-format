@@ -1,0 +1,9 @@
+# -*- mode: yaml -*-
+---
+Language: Proto
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+UseTab: AlignWithSpaces
+IndentWidth: 4
+TabWidth: 4
+---

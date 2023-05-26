@@ -37,7 +37,7 @@ type ArtemisManager struct {
 	mx                                sync.Mutex
 	wg, artemisWg, trackerWg          sync.WaitGroup
 	fileWriter                        *FrameReadoutFileWriter
-	trackers                          *RemoteManager
+	trackers                          *Server
 	nodeConfig                        NodeConfiguration
 
 	artemisCmd   *exec.Cmd

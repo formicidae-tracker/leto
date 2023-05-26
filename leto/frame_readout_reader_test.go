@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"math"
 	"math/rand"
 	"testing"
@@ -61,7 +62,7 @@ func (s *FrameReadoutReaderSuite) TestHelloWorld(c *C) {
 
 	data := bytes.NewBuffer(b.Bytes())
 
-	go FrameReadoutReadAll(data, C, E)
+	go FrameReadoutReadAll(context.TODO(), data, C, E)
 
 	i := 0
 	for {

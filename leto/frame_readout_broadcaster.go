@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -12,81 +14,136 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-func BroadcastFrameReadout(address string, readouts <-chan *hermes.FrameReadout, idle time.Duration) error {
-	logger := log.New(os.Stderr, "[broadcast] ", 0)
-	m := NewRemoteManager()
+type HermesBroadcasterTask interface {
+	Task
+	Incoming() chan<- *hermes.FrameReadout
+}
 
-	mx := sync.RWMutex{}
-	outgoing := map[int]chan []byte{}
+type hermesBroadcaster struct {
+	mx sync.RWMutex
 
-	go func() {
-		for r := range readouts {
-			b := proto.NewBuffer(nil)
-			b.EncodeMessage(r)
-			mx.RLock()
-			for _, o := range outgoing {
-				o <- b.Bytes()
-			}
-			mx.RUnlock()
+	server   *Server
+	incoming chan *hermes.FrameReadout
+	outgoing map[int]chan []byte
+	idle     time.Duration
+	nextId   int
+}
+
+func (b *hermesBroadcaster) Incoming() chan<- *hermes.FrameReadout {
+	return b.incoming
+}
+
+func (b *hermesBroadcaster) Start() {
+	go b.incomingLoop()
+	b.server.Start()
+}
+
+func (b *hermesBroadcaster) incomingLoop() {
+	defer b.closeAllOutgoing()
+	for r := range b.incoming {
+		buf := proto.NewBuffer(nil)
+		buf.EncodeMessage(r)
+		b.broadcastToAll(buf.Bytes())
+	}
+}
+
+func (b *hermesBroadcaster) broadcastToAll(data []byte) {
+	b.mx.RLock()
+	defer b.mx.RUnlock()
+
+	for _, ch := range b.outgoing {
+		select {
+		case ch <- data:
+		default:
+			continue
 		}
-		m.Close()
-		mx.Lock()
-		defer mx.Unlock()
-		for _, o := range outgoing {
-			close(o)
+	}
+}
+
+func (b *hermesBroadcaster) closeAllOutgoing() {
+	b.mx.Lock()
+	defer b.mx.Unlock()
+
+	for _, ch := range b.outgoing {
+		close(ch)
+	}
+	b.outgoing = nil
+}
+
+func (b *hermesBroadcaster) Done() <-chan error {
+	return b.server.Done()
+}
+
+func NewHermesBroadcaster(ctx context.Context, port int, idle time.Duration) (HermesBroadcasterTask, error) {
+	server, err := NewServer(ctx, port, "[broadcast]: ", 1*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	res := &hermesBroadcaster{
+		server:   server,
+		incoming: make(chan *hermes.FrameReadout),
+		idle:     idle,
+	}
+	return res, nil
+}
+
+func (h *hermesBroadcaster) registerNew() (int, <-chan []byte) {
+	h.mx.Lock()
+	defer h.mx.Unlock()
+	id := h.nextId
+	h.nextId += 1
+
+	h.outgoing[id] = make(chan []byte, 10)
+	return id, h.outgoing[id]
+}
+
+func (h *hermesBroadcaster) unregister(id int) {
+	h.mx.Lock()
+	defer h.mx.Unlock()
+	delete(h.outgoing, id)
+}
+
+func (h *hermesBroadcaster) onAccept(ctx context.Context, conn net.Conn) {
+	logger := log.New(os.Stderr, fmt.Sprintf("[broadcast/%s]: ", conn.RemoteAddr()), 0)
+	defer func() {
+		if err := conn.Close(); err != nil {
+			logger.Printf("could not close connection: %s", err)
 		}
-		outgoing = make(map[int]chan []byte)
 	}()
-	i := 0
-	// hostname, err := os.Hostname()
-	// if err != nil {
-	// 	return err
-	// }
-	// srv, err := zeroconf.Register(fmt.Sprintf("artemis.%s", hostname), "_artemis._tcp", "local.", 4001, nil, nil)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer srv.Shutdown()
 
-	logger.Printf("Broadcasting on %s", address)
-	return m.Listen(address, func(c net.Conn) {
-		defer c.Close()
-		logger := log.New(os.Stderr, fmt.Sprintf("[broadcast/%s] ", c.RemoteAddr().String()), 0)
+	if err := h.writeHeader(conn); err != nil {
+		logger.Printf("could not write header: %s", err)
+		return
+	}
 
-		b := proto.NewBuffer(nil)
-		header := &hermes.Header{
-			Type: hermes.Header_Network,
-			Version: &hermes.Version{
-				Vmajor: 0,
-				Vminor: 5,
-			},
-		}
-		b.EncodeMessage(header)
+	id, outgoing := h.registerNew()
+	defer h.unregister(id)
 
-		_, err := c.Write(b.Bytes())
+	logger.Printf("started data stream")
+
+	for data := range outgoing {
+		conn.SetDeadline(time.Now().Add(h.idle))
+		_, err := conn.Write(data)
 		if err != nil {
-			logger.Printf("could not write header: %s", err)
+			logger.Printf("could not write data: %s", err)
+			logger.Printf("stopping stream early")
 			return
 		}
-		o := make(chan []byte, 10)
-		mx.Lock()
-		idx := i
-		outgoing[idx] = o
-		i += 1
-		mx.Unlock()
-		for buf := range o {
-			c.SetWriteDeadline(time.Now().Add(idle))
-			_, err := c.Write(buf)
-			if err != nil {
-				logger.Printf("Could not write frame conn %d: %s", idx, err)
-				mx.Lock()
-				close(o)
-				delete(outgoing, idx)
-				mx.Unlock()
-				return // need an explicit return as otherwise it may loop again and close it twice
-			}
-		}
-	}, func() {
-		log.Printf("Stopped broadcasting on %s", address)
+	}
+
+	logger.Println("stopping stream")
+
+}
+
+func (h *hermesBroadcaster) writeHeader(w io.Writer) error {
+	buf := proto.NewBuffer(nil)
+	buf.EncodeMessage(&hermes.Header{
+		Type: hermes.Header_Network,
+		Version: &hermes.Version{
+			Vmajor: 0,
+			Vminor: 5,
+		},
 	})
+	_, err := w.Write(buf.Bytes())
+	return err
 }
