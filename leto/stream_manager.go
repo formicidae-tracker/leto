@@ -71,7 +71,7 @@ func (cmd *FFMpegCommand) Wait() error {
 	return cmd.ecmd.Wait()
 }
 
-type StreamManager struct {
+type VideoManager struct {
 	mx sync.Mutex
 	wg sync.WaitGroup
 
@@ -100,8 +100,8 @@ type StreamManager struct {
 	logger *log.Logger
 }
 
-func NewStreamManager(basedir string, fps float64, config leto.StreamConfiguration) (*StreamManager, error) {
-	res := &StreamManager{
+func NewVideoManager(basedir string, fps float64, config leto.StreamConfiguration) (*VideoManager, error) {
+	res := &VideoManager{
 		baseMovieName:     filepath.Join(basedir, "stream.mp4"),
 		baseFrameMatching: filepath.Join(basedir, "stream.frame-matching.txt"),
 		encodeLogBase:     filepath.Join(basedir, "encoding.log"),
@@ -144,7 +144,7 @@ var tunes = map[string]bool{
 	"zerolatency": true,
 }
 
-func (m *StreamManager) Check() error {
+func (m *VideoManager) Check() error {
 	if ok := presets[m.quality]; ok == false {
 		return fmt.Errorf("unknown quality '%s'", m.quality)
 	}
@@ -154,7 +154,7 @@ func (m *StreamManager) Check() error {
 	return nil
 }
 
-func (s *StreamManager) waitUnsafe() {
+func (s *VideoManager) waitUnsafe() {
 
 	if s.encodeCmd != nil {
 		s.logger.Printf("waiting for encoding to stop")
@@ -186,7 +186,7 @@ func (s *StreamManager) waitUnsafe() {
 
 }
 
-func (s *StreamManager) Wait() {
+func (s *VideoManager) Wait() {
 	s.wg.Wait()
 
 	s.mx.Lock()
@@ -228,7 +228,7 @@ func TeeCopy(dst, dstErrorIgnored io.Writer, src io.Reader) error {
 	}
 }
 
-func (s *StreamManager) startTasks() error {
+func (s *VideoManager) startTasks() error {
 	encodeLogName, _, err := FilenameWithoutOverwrite(s.encodeLogBase)
 	if err != nil {
 		return err
@@ -318,7 +318,7 @@ func (s *StreamManager) startTasks() error {
 	return nil
 }
 
-func (s *StreamManager) stopTasks() {
+func (s *VideoManager) stopTasks() {
 	if s.encodeCmd == nil {
 		return
 	}
@@ -328,7 +328,7 @@ func (s *StreamManager) stopTasks() {
 	s.encodeCmd.Stop()
 }
 
-func (s *StreamManager) EncodeAndStreamMuxedStream(muxed io.Reader) {
+func (s *VideoManager) EncodeAndStreamMuxedStream(muxed io.Reader) {
 	s.wg.Add(1)
 	defer s.wg.Done()
 	header := make([]byte, 3*8)
@@ -405,7 +405,7 @@ func (s *StreamManager) EncodeAndStreamMuxedStream(muxed io.Reader) {
 
 }
 
-func (s *StreamManager) encodeCommandArgs() []string {
+func (s *VideoManager) encodeCommandArgs() []string {
 	vbr := fmt.Sprintf("%dk", s.bitrate)
 	maxbr := fmt.Sprintf("%dk", s.maxBitrate)
 	return []string{"-hide_banner",
@@ -431,7 +431,7 @@ func (s *StreamManager) encodeCommandArgs() []string {
 		"-"}
 }
 
-func (s *StreamManager) streamCommandArgs() []string {
+func (s *VideoManager) streamCommandArgs() []string {
 	if len(s.destAddress) == 0 {
 		return []string{}
 	}
@@ -444,7 +444,7 @@ func (s *StreamManager) streamCommandArgs() []string {
 	}
 }
 
-func (s *StreamManager) saveCommandArgs(file string) []string {
+func (s *VideoManager) saveCommandArgs(file string) []string {
 	return []string{"-hide_banner",
 		"-loglevel", "warning",
 		"-f", "flv",

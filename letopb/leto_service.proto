@@ -3,25 +3,24 @@ syntax = "proto3";
 option go_package = ".;letopb";
 package fort.leto.proto;
 
-
 import "google/protobuf/timestamp.proto";
 
-message Empty {
-}
+message Empty {}
 
-message StartRequest{
-	string yaml_configuration = 1;
-}
+message StartRequest { string yaml_configuration = 1; }
 
 message ExperimentStatus {
 	google.protobuf.Timestamp since              = 1;
 	string                    experiment_dir     = 2;
 	string                    yaml_configuration = 3;
+	int64                     total_bytes        = 4;
+	int64                     free_bytes         = 5;
+	int64                     bytes_per_second   = 6;
 }
 
 message Status {
-	string           master = 1;
-	repeated string  slaves = 2;
+	string           master     = 1;
+	repeated string  slaves     = 2;
 	ExperimentStatus experiment = 3;
 }
 
@@ -41,7 +40,7 @@ message TrackingLink {
 }
 
 service Leto {
-	rpc StartTracking(StartRequest) returns ( Empty );
+	rpc StartTracking(StartRequest) returns (Empty);
 	rpc StopTracking(Empty) returns (Empty);
 	rpc GetStatus(Empty) returns (Status);
 	rpc GetLastExperimentLog(Empty) returns (ExperimentLog);

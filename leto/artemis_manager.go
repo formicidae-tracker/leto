@@ -40,11 +40,11 @@ type ArtemisManager struct {
 	trackers                          *RemoteManager
 	nodeConfig                        NodeConfiguration
 
-	artemisCmd    *exec.Cmd
-	artemisOut    *io.PipeWriter
-	streamIn      *io.PipeReader
-	streamManager *StreamManager
-	testMode      bool
+	artemisCmd   *exec.Cmd
+	artemisOut   *io.PipeWriter
+	videoIn      *io.PipeReader
+	videoManager *VideoManager
+	testMode     bool
 
 	stopRegistration  func()
 	registrationEnded chan struct{}
@@ -129,14 +129,18 @@ func (m *ArtemisManager) Start(userConfig *leto.TrackingConfiguration) error {
 		return fmt.Errorf("ArtemisManager: Start: already started")
 	}
 
+	//why two steps ?
 	if err := m.setUpExperiment(userConfig); err != nil {
 		return err
 	}
 
 	m.spawnTasks()
 
+	// again ? or is it a task
+	// slave should not register ....
 	m.registerOlympus()
 
+	// ok
 	m.writePersistentFile()
 
 	return nil
@@ -154,6 +158,7 @@ func (m *ArtemisManager) Stop() error {
 
 	m.unregisterOlympus()
 
+	// why would it be nil ?
 	if m.artemisCmd != nil {
 		if m.nodeConfig.IsMaster() == true {
 			m.stopSlavesTrackers()
@@ -164,6 +169,7 @@ func (m *ArtemisManager) Stop() error {
 		m.artemisCmd = nil
 	}
 
+	// WHY?????
 	m.mx.Unlock()
 	m.artemisWg.Wait()
 	m.mx.Lock()
@@ -477,9 +483,13 @@ func (m *ArtemisManager) setUpFileWriterTask() error {
 
 func (m *ArtemisManager) setUpStreamTask() error {
 	var err error
-	m.streamIn, m.artemisOut = io.Pipe()
+	m.videoIn, m.artemisOut = io.Pipe()
 	m.artemisCmd.Stdout = m.artemisOut
-	m.streamManager, err = NewStreamManager(m.experimentDir, *m.experimentConfig.Camera.FPS/float64(m.workBalance.Stride), m.experimentConfig.Stream)
+	m.videoManager, err = NewVideoManager(
+		m.experimentDir,
+		*m.experimentConfig.Camera.FPS/float64(m.workBalance.Stride),
+		m.experimentConfig.Stream,
+	)
 	return err
 }
 
@@ -621,7 +631,7 @@ func (m *ArtemisManager) spawnStreamTask() {
 	//TODO: setup waitgroup ? Was not done so maybe it was stopping
 	//the application to work from a weird race condition. But it
 	//should ultimately have some kind of synchronization
-	go m.streamManager.EncodeAndStreamMuxedStream(m.streamIn)
+	go m.videoManager.EncodeAndStreamMuxedStream(m.videoIn)
 }
 
 func (m *ArtemisManager) startSlavesTrackers() {
@@ -711,14 +721,14 @@ func (m *ArtemisManager) tearDownFilewriter() {
 }
 
 func (m *ArtemisManager) tearDownStreamTask() {
-	if m.streamManager != nil {
+	if m.videoManager != nil {
 		m.logger.Printf("Waiting for stream tasks to stop")
 		m.artemisOut.Close()
-		m.streamManager.Wait()
-		m.streamManager = nil
-		m.streamIn.Close()
+		m.videoManager.Wait()
+		m.videoManager = nil
+		m.videoIn.Close()
 		m.artemisOut = nil
-		m.streamIn = nil
+		m.videoIn = nil
 	}
 }
 
@@ -739,8 +749,8 @@ func (m *ArtemisManager) cleanUpGlobalVariables() {
 	m.broadcast = nil
 	m.trackers = nil
 	m.artemisOut = nil
-	m.streamIn = nil
-	m.streamManager = nil
+	m.videoIn = nil
+	m.videoManager = nil
 	m.experimentConfig = nil
 	m.workBalance = nil
 }
@@ -749,12 +759,14 @@ func (m *ArtemisManager) tearDownExperiment(err error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
+	/// this is done twice !!!! WHY ????
 	if err != nil {
 		m.removePersistentFile()
 	}
 
 	m.lastExperimentLog = newExperimentLog(err != nil, m.since, m.experimentConfig, m.experimentDir)
 
+	// Why two cleanup ?
 	m.tearDownTrackerListenTask()
 	m.tearDownSubTasks()
 
