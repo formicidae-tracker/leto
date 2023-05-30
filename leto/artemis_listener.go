@@ -55,6 +55,6 @@ func (l *artemisListener) onAccept(ctx context.Context, conn net.Conn) {
 			logger.Printf("frame reading error: %s", err)
 		}
 	}()
-	FrameReadoutReadAll(ctx, conn, l.outbound, errors)
+	ReadAllFrameReadout(ctx, conn, l.outbound, errors)
 	logger.Printf("stop reading incoming frames")
 }

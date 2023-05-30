@@ -25,11 +25,11 @@ func Test(t *testing.T) {
 	TestingT(t)
 }
 
-type FrameReadoutReaderSuite struct{}
+type FrameReadoutUtilsSuite struct{}
 
-var _ = Suite(&FrameReadoutReaderSuite{})
+var _ = Suite(&FrameReadoutUtilsSuite{})
 
-func (s *FrameReadoutReaderSuite) TestHelloWorld(c *C) {
+func (s *FrameReadoutUtilsSuite) TestHelloWorld(c *C) {
 	testdata := []*hermes.FrameReadout{
 		{
 			Timestamp:    0,
@@ -71,7 +71,7 @@ func (s *FrameReadoutReaderSuite) TestHelloWorld(c *C) {
 
 	data := bytes.NewBuffer(b.Bytes())
 
-	go FrameReadoutReadAll(context.TODO(), data, C, E)
+	go ReadAllFrameReadout(context.TODO(), data, C, E)
 
 	i := 0
 	for {

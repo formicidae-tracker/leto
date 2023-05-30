@@ -7,7 +7,7 @@ import (
 	"github.com/formicidae-tracker/hermes"
 )
 
-func FrameReadoutReadAll(ctx context.Context,
+func ReadAllFrameReadout(ctx context.Context,
 	stream io.Reader,
 	readouts chan<- *hermes.FrameReadout,
 	errors chan<- error) {

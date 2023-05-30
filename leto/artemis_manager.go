@@ -39,7 +39,7 @@ type ArtemisManager struct {
 	ctx    context.Context
 	cancel func()
 
-	fileWriter  FrameReadoutFileWriter
+	fileWriter  HermesFileWriter
 	trackers    ArtemisListener
 	broadcaster HermesBroadcaster
 	nodeConfig  NodeConfiguration

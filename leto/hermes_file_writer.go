@@ -12,12 +12,12 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-type FrameReadoutFileWriter interface {
+type HermesFileWriter interface {
 	Task
 	Incoming() chan<- *hermes.FrameReadout
 }
 
-type frameReadoutFileWriter struct {
+type hermesFileWriter struct {
 	period                         time.Duration
 	basename                       string
 	lastname, lastUncompressedName string
@@ -27,9 +27,9 @@ type frameReadoutFileWriter struct {
 	incoming                       chan *hermes.FrameReadout
 }
 
-func NewFrameReadoutWriter(filepath string) (FrameReadoutFileWriter, error) {
+func NewFrameReadoutWriter(filepath string) (HermesFileWriter, error) {
 
-	return &frameReadoutFileWriter{
+	return &hermesFileWriter{
 		period:   2 * time.Hour,
 		basename: filepath,
 		logger:   NewLogger("file-writer"),
@@ -38,11 +38,11 @@ func NewFrameReadoutWriter(filepath string) (FrameReadoutFileWriter, error) {
 
 }
 
-func (w *frameReadoutFileWriter) Incoming() chan<- *hermes.FrameReadout {
+func (w *hermesFileWriter) Incoming() chan<- *hermes.FrameReadout {
 	return w.incoming
 }
 
-func (w *frameReadoutFileWriter) openFile(filename, filenameUncompressed string, width, height int32) error {
+func (w *hermesFileWriter) openFile(filename, filenameUncompressed string, width, height int32) error {
 	var err error
 	w.file, err = os.Create(filename)
 	if err != nil {
@@ -86,7 +86,7 @@ func (w *frameReadoutFileWriter) openFile(filename, filenameUncompressed string,
 	return err
 }
 
-func (w *frameReadoutFileWriter) closeUncompressed() error {
+func (w *hermesFileWriter) closeUncompressed() error {
 	if w.uncompressed == nil {
 		return nil
 	}
@@ -102,7 +102,7 @@ func (w *frameReadoutFileWriter) closeUncompressed() error {
 	return nil
 }
 
-func (w *frameReadoutFileWriter) closeFile() error {
+func (w *hermesFileWriter) closeFile() error {
 	if w.file == nil {
 		return nil
 	}
@@ -113,7 +113,7 @@ func (w *frameReadoutFileWriter) closeFile() error {
 	return nil
 }
 
-func (w *frameReadoutFileWriter) closeGzip() error {
+func (w *hermesFileWriter) closeGzip() error {
 	if w.gzip == nil {
 		return nil
 	}
@@ -124,7 +124,7 @@ func (w *frameReadoutFileWriter) closeGzip() error {
 	return nil
 }
 
-func (w *frameReadoutFileWriter) closeFiles(nextFile string) (retError error) {
+func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 	defer func() {
 		err := w.closeUncompressed()
 		if retError == nil {
@@ -179,12 +179,12 @@ func (w *frameReadoutFileWriter) closeFiles(nextFile string) (retError error) {
 	return nil
 }
 
-func (w *frameReadoutFileWriter) uncompressedName(filename string) string {
+func (w *hermesFileWriter) uncompressedName(filename string) string {
 	base := filepath.Base(filename)
 	return filepath.Join(filepath.Dir(filename), "uncompressed-"+base)
 }
 
-func (w *frameReadoutFileWriter) writeLine(r *hermes.FrameReadout, nextName string) error {
+func (w *hermesFileWriter) writeLine(r *hermes.FrameReadout, nextName string) error {
 	if w.file == nil {
 		err := w.openFile(nextName, w.uncompressedName(nextName), r.Width, r.Height)
 		if err != nil {
@@ -224,7 +224,7 @@ func (w *frameReadoutFileWriter) writeLine(r *hermes.FrameReadout, nextName stri
 	return nil
 }
 
-func (w *frameReadoutFileWriter) closeAndGetNextName() (string, error) {
+func (w *hermesFileWriter) closeAndGetNextName() (string, error) {
 	nextName, _, err := FilenameWithoutOverwrite(w.basename)
 	if err != nil {
 		return "", fmt.Errorf("could not find unique name: %w", err)
@@ -232,7 +232,7 @@ func (w *frameReadoutFileWriter) closeAndGetNextName() (string, error) {
 	return nextName, w.closeFiles(nextName)
 }
 
-func (w *frameReadoutFileWriter) Run() (retError error) {
+func (w *hermesFileWriter) Run() (retError error) {
 	ticker := time.NewTicker(w.period)
 	defer func() {
 		ticker.Stop()
