@@ -12,3 +12,12 @@ func Start(t Task) <-chan error {
 	}()
 	return err
 }
+
+func StartFunc(f func() error) <-chan error {
+	err := make(chan error)
+	go func() {
+		defer close(err)
+		err <- f()
+	}()
+	return err
+}

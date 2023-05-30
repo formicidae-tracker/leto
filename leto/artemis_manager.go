@@ -44,11 +44,12 @@ type ArtemisManager struct {
 	broadcaster HermesBroadcaster
 	nodeConfig  NodeConfiguration
 
-	artemisCmd   *exec.Cmd
-	artemisOut   *io.PipeWriter
-	videoIn      *io.PipeReader
-	videoManager *VideoManager
-	testMode     bool
+	artemisCmd      *exec.Cmd
+	artemisOut      *io.PipeWriter
+	videoIn         *io.PipeReader
+	videoManager    VideoManager
+	videoManagerErr <-chan error
+	testMode        bool
 
 	stopRegistration  func()
 	registrationEnded chan struct{}
@@ -650,7 +651,9 @@ func (m *ArtemisManager) spawnStreamTask() {
 	//TODO: setup waitgroup ? Was not done so maybe it was stopping
 	//the application to work from a weird race condition. But it
 	//should ultimately have some kind of synchronization
-	go m.videoManager.EncodeAndStreamMuxedStream(m.videoIn)
+	m.videoManagerErr = StartFunc(func() error {
+		return m.videoManager.Run(m.videoIn)
+	})
 }
 
 func (m *ArtemisManager) startSlavesTrackers() {
@@ -739,8 +742,12 @@ func (m *ArtemisManager) tearDownStreamTask() {
 	if m.videoManager != nil {
 		m.logger.Printf("Waiting for stream tasks to stop")
 		m.artemisOut.Close()
-		m.videoManager.Wait()
+		err := <-m.videoManagerErr
+		if err != nil {
+			m.logger.Printf("video error: %s", err)
+		}
 		m.videoManager = nil
+		m.videoManagerErr = nil
 		m.videoIn.Close()
 		m.artemisOut = nil
 		m.videoIn = nil
