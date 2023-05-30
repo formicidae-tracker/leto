@@ -12,28 +12,37 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-type FrameReadoutFileWriter struct {
+type FrameReadoutFileWriter interface {
+	Task
+	Incoming() chan<- *hermes.FrameReadout
+}
+
+type frameReadoutFileWriter struct {
 	period                         time.Duration
 	basename                       string
 	lastname, lastUncompressedName string
 	file, uncompressed             *os.File
 	gzip                           *gzip.Writer
 	logger                         *log.Logger
-	quit                           chan struct{}
+	incoming                       chan *hermes.FrameReadout
 }
 
-func NewFrameReadoutWriter(filepath string) (*FrameReadoutFileWriter, error) {
+func NewFrameReadoutWriter(filepath string) (FrameReadoutFileWriter, error) {
 
-	return &FrameReadoutFileWriter{
+	return &frameReadoutFileWriter{
 		period:   2 * time.Hour,
 		basename: filepath,
-		quit:     make(chan struct{}),
-		logger:   NewLogger(fmt.Sprintf("file/%s", filepath)),
+		logger:   NewLogger("file-writer"),
+		incoming: make(chan *hermes.FrameReadout, 200),
 	}, nil
 
 }
 
-func (w *FrameReadoutFileWriter) openFile(filename, filenameUncompressed string, width, height int32) error {
+func (w *frameReadoutFileWriter) Incoming() chan<- *hermes.FrameReadout {
+	return w.incoming
+}
+
+func (w *frameReadoutFileWriter) openFile(filename, filenameUncompressed string, width, height int32) error {
 	var err error
 	w.file, err = os.Create(filename)
 	if err != nil {
@@ -73,11 +82,75 @@ func (w *FrameReadoutFileWriter) openFile(filename, filenameUncompressed string,
 		return err
 	}
 	_, err = w.uncompressed.Write(b.Bytes())
-	log.Printf("Writing to file '%s' and '%s'", filename, filenameUncompressed)
+	w.logger.Printf("writing to file '%s' and '%s'", filename, filenameUncompressed)
 	return err
 }
 
-func (w *FrameReadoutFileWriter) closeFiles(nextFile string) {
+func (w *frameReadoutFileWriter) closeUncompressed() error {
+	if w.uncompressed == nil {
+		return nil
+	}
+	defer func() { w.uncompressed = nil }()
+
+	if err := w.uncompressed.Close(); err != nil {
+		return fmt.Errorf("could not close uncompressed file '%s': %w", w.lastUncompressedName, err)
+	}
+	if err := os.RemoveAll(w.lastUncompressedName); err != nil {
+		w.logger.Printf("could not remove last uncompressed segment '%s': %s", w.lastUncompressedName, err)
+	}
+
+	return nil
+}
+
+func (w *frameReadoutFileWriter) closeFile() error {
+	if w.file == nil {
+		return nil
+	}
+	defer func() { w.file = nil }()
+	if err := w.file.Close(); err != nil {
+		return fmt.Errorf("could not close '%s': %w", w.lastname, err)
+	}
+	return nil
+}
+
+func (w *frameReadoutFileWriter) closeGzip() error {
+	if w.gzip == nil {
+		return nil
+	}
+	defer func() { w.gzip = nil }()
+	if err := w.gzip.Close(); err != nil {
+		return fmt.Errorf("could not close gzipper: %w", err)
+	}
+	return nil
+}
+
+func (w *frameReadoutFileWriter) closeFiles(nextFile string) (retError error) {
+	defer func() {
+		err := w.closeUncompressed()
+		if retError == nil {
+			retError = err
+		} else if err != nil {
+			w.logger.Printf("additional close error: %s", err)
+		}
+	}()
+	defer func() {
+		err := w.closeFile()
+
+		if retError == nil {
+			retError = err
+		} else if err != nil {
+			w.logger.Printf("additional close error: %s", err)
+		}
+	}()
+	defer func() {
+		err := w.closeGzip()
+		if retError == nil {
+			retError = err
+		} else if err != nil {
+			w.logger.Printf("additional close error: %s", err)
+		}
+	}()
+
 	footer := &hermes.Footer{}
 	if len(nextFile) > 0 {
 		footer.Next = filepath.Base(nextFile)
@@ -87,122 +160,115 @@ func (w *FrameReadoutFileWriter) closeFiles(nextFile string) {
 		Footer: footer,
 	}
 
-	if w.gzip != nil && w.file != nil {
-		b := proto.NewBuffer(nil)
-		if err := b.EncodeMessage(line); err != nil {
-			w.logger.Printf("Could not encode footer: %s", err)
-		} else {
-			if _, err := w.gzip.Write(b.Bytes()); err != nil {
-				w.logger.Printf("Could not write footer: %s", err)
-			}
-			if _, err := w.uncompressed.Write(b.Bytes()); err != nil {
-				w.logger.Printf("Could not write uncompressed footer: %s", err)
-			}
-		}
+	if w.gzip == nil || w.file == nil || w.uncompressed == nil {
+		return nil
 	}
 
-	if w.gzip != nil {
-		if err := w.gzip.Close(); err != nil {
-			w.logger.Printf("could not close gzipper: %s", err)
-		}
-		w.gzip = nil
-	}
-	if w.file != nil {
-		if err := w.file.Close(); err != nil {
-			w.logger.Printf("could not close '%s': %s", w.lastname, err)
-		}
-		w.file = nil
-	}
-	if w.uncompressed != nil {
-		if err := w.uncompressed.Close(); err != nil {
-			w.logger.Printf("could not close uncompressed file '%s': %s", w.lastUncompressedName, err)
-		}
-		if err := os.RemoveAll(w.lastUncompressedName); err != nil {
-			w.logger.Printf("could not remove last uncompressed segment '%s': %s", w.lastUncompressedName, err)
-		}
-	}
-}
+	b := proto.NewBuffer(nil)
 
-func (w *FrameReadoutFileWriter) Close() error {
-	close(w.quit)
-	w.closeFiles("")
+	if err := b.EncodeMessage(line); err != nil {
+		return fmt.Errorf("could not encode footer: %w", err)
+	}
+
+	if _, err := w.gzip.Write(b.Bytes()); err != nil {
+		return fmt.Errorf("could not write footer: %w", err)
+	}
+	if _, err := w.uncompressed.Write(b.Bytes()); err != nil {
+		return fmt.Errorf("could not write uncompressed footer: %s", err)
+	}
 	return nil
 }
 
-func (w *FrameReadoutFileWriter) WriteAll(readout <-chan *hermes.FrameReadout) {
+func (w *frameReadoutFileWriter) uncompressedName(filename string) string {
+	base := filepath.Base(filename)
+	return filepath.Join(filepath.Dir(filename), "uncompressed-"+base)
+}
+
+func (w *frameReadoutFileWriter) writeLine(r *hermes.FrameReadout, nextName string) error {
+	if w.file == nil {
+		err := w.openFile(nextName, w.uncompressedName(nextName), r.Width, r.Height)
+		if err != nil {
+			return err
+		}
+	}
+
+	// makes a semi-shallow copy to strip away unucessary
+	// information. Most of the data is the list of ants and
+	// we just do a shallow copy of the slice. The other
+	// embedded field could be modified freely
+	toWrite := *r
+
+	// removes unucessary information on a per-frame basis. It
+	// is concurrently safe since we are not modifying a
+	// pointed field.
+	toWrite.ProducerUuid = ""
+	toWrite.Quads = 0
+	toWrite.Width = 0
+	toWrite.Height = 0
+
+	b := proto.NewBuffer(nil)
+	line := &hermes.FileLine{
+		Readout: &toWrite,
+	}
+	if err := b.EncodeMessage(line); err != nil {
+		return fmt.Errorf("could not encode message: %w", err)
+	}
+	_, err := w.gzip.Write(b.Bytes())
+	if err != nil {
+		return fmt.Errorf("could not write message: %w", err)
+	}
+	_, err = w.uncompressed.Write(b.Bytes())
+	if err != nil {
+		return fmt.Errorf("could not write uncompressed message: %w", err)
+	}
+	return nil
+}
+
+func (w *frameReadoutFileWriter) closeAndGetNextName() (string, error) {
+	nextName, _, err := FilenameWithoutOverwrite(w.basename)
+	if err != nil {
+		return "", fmt.Errorf("could not find unique name: %w", err)
+	}
+	return nextName, w.closeFiles(nextName)
+}
+
+func (w *frameReadoutFileWriter) Run() (retError error) {
 	ticker := time.NewTicker(w.period)
 	defer func() {
 		ticker.Stop()
-		w.closeFiles("")
+		err := w.closeFiles("")
+		if retError == nil {
+			retError = err
+		}
 	}()
 
 	closeNext := false
 	nextName, _, err := FilenameWithoutOverwrite(w.basename)
 	if err != nil {
-		w.logger.Printf("Could not find unique name: %s", err)
-		return
+		return fmt.Errorf("could not find unique name: %w", err)
 	}
 
 	for {
 		select {
 		case <-ticker.C:
 			closeNext = true
-		case <-w.quit:
-			return
-		case r, ok := <-readout:
+		case r, ok := <-w.incoming:
 			if ok == false {
-				return
+				return nil
 			}
-			if w.file == nil {
-				err := w.openFile(nextName, "uncompressed-"+nextName, r.Width, r.Height)
-				if err != nil {
-					w.logger.Printf("Could not create file '%s': %s", nextName, err)
-					return
-				}
-			}
-
-			// makes a semi-shallow copy to strip away unucessary
-			// information. Most of the data is the list of ants and
-			// we just do a shallow copy of the slice. The other
-			// embedded field could be modified freely
-			toWrite := *r
-
-			// removes unucessary information on a per-frame basis. It
-			// is concurrently safe since we are not modifying a
-			// pointed field.
-			toWrite.ProducerUuid = ""
-			toWrite.Quads = 0
-			toWrite.Width = 0
-			toWrite.Height = 0
-
-			b := proto.NewBuffer(nil)
-			line := &hermes.FileLine{
-				Readout: &toWrite,
-			}
-			if err := b.EncodeMessage(line); err != nil {
-				w.logger.Printf("Could not encode message: %s", err)
-			}
-			_, err := w.gzip.Write(b.Bytes())
-			if err != nil {
-				w.logger.Printf("Could not write message: %s", err)
-				return
-			}
-			_, err = w.uncompressed.Write(b.Bytes())
-			if err != nil {
-				w.logger.Printf("Could not write uncompressed message: %s", err)
-				return
+			if err := w.writeLine(r, nextName); err != nil {
+				return err
 			}
 
 			if closeNext == false {
 				continue
 			}
-			closeNext = false
 
-			nextName, _, err = FilenameWithoutOverwrite(w.basename)
+			closeNext = false
+			nextName, err = w.closeAndGetNextName()
 			if err != nil {
-				w.logger.Printf("Could not find unique name: %s", err)
+				return err
 			}
-			w.closeFiles(nextName)
 		}
 	}
 }

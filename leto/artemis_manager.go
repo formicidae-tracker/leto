@@ -39,7 +39,7 @@ type ArtemisManager struct {
 	ctx    context.Context
 	cancel func()
 
-	fileWriter  *FrameReadoutFileWriter
+	fileWriter  FrameReadoutFileWriter
 	trackers    ArtemisListener
 	broadcaster HermesBroadcaster
 	nodeConfig  NodeConfiguration
@@ -642,7 +642,7 @@ func (m *ArtemisManager) spawnFrameReadoutBroadCastTask() {
 func (m *ArtemisManager) spawnFrameReadoutWriteTask() {
 	m.wg.Add(1)
 	go func() {
-		m.fileWriter.WriteAll(m.file)
+		m.fileWriter.Run()
 		m.wg.Done()
 	}()
 }
@@ -733,9 +733,6 @@ func (m *ArtemisManager) tearDownTrackerListenTask() {
 }
 
 func (m *ArtemisManager) tearDownFilewriter() {
-	if m.fileWriter != nil {
-		m.fileWriter.Close()
-	}
 }
 
 func (m *ArtemisManager) tearDownStreamTask() {
