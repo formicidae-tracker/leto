@@ -1,14 +1,23 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/adrg/xdg"
 	"github.com/formicidae-tracker/leto"
+	"github.com/google/uuid"
 )
 
+// An ExperimentConfiguration contains all information on an actual
+// Experiment to be run by leto. It merges the leto.Config,
+// NodeConfiguration and WorkloadBalance, and the actual destination
+// on the disk.
 type ExperimentConfiguration struct {
 	Node                NodeConfiguration
 	Tracking            *leto.TrackingConfiguration
@@ -16,6 +25,141 @@ type ExperimentConfiguration struct {
 	TestMode            bool
 	ExperimentDir       string
 	ArtemisIncomingPort int
+}
+
+func NewExperimentConfiguration(leto leto.Config, node NodeConfiguration, user *leto.TrackingConfiguration) (*ExperimentConfiguration, error) {
+	tracking, err := finalizeTracking(user, node)
+	if err != nil {
+		return nil, err
+	}
+
+	balancing := newWorkloadBalance(tracking.Loads, *tracking.Camera.FPS)
+
+	res := &ExperimentConfiguration{
+		Node:                node,
+		Tracking:            tracking,
+		Balancing:           balancing,
+		ArtemisIncomingPort: leto.ArtemisIncomingPort,
+	}
+
+	res.setUpTestMode()
+	if err := res.computeExperimentDir(); err != nil {
+		return nil, err
+	}
+
+	return nil, errors.New("not yet implemented")
+}
+
+func finalizeTracking(user *leto.TrackingConfiguration, node NodeConfiguration) (*leto.TrackingConfiguration, error) {
+	tracking := leto.LoadDefaultConfig()
+	if err := tracking.Merge(user); err != nil {
+		return nil, fmt.Errorf("could not merge tracking configuration: %w", err)
+	}
+
+	if err := setUpLoadBalancing(tracking, node); err != nil {
+		return nil, fmt.Errorf("could not setup load balancing: %w", err)
+	}
+
+	if err := tracking.CheckAllFieldAreSet(); err != nil {
+		return nil, fmt.Errorf("incomplete tracking configuration: %w", err)
+	}
+	return tracking, nil
+}
+
+func setUpLoadBalancing(tracking *leto.TrackingConfiguration, node NodeConfiguration) error {
+	if node.IsMaster() == false {
+		return nil
+	}
+	tracking.Loads = generateLoadBalancing(node)
+	if len(node.Slaves) == 0 {
+		return nil
+	}
+	var err error
+	tracking.Loads.Width, tracking.Loads.Height, err = fetchCameraResolution(tracking.Camera.StubPaths)
+	return err
+}
+
+func generateLoadBalancing(c NodeConfiguration) *leto.LoadBalancing {
+	if len(c.Slaves) == 0 {
+		return &leto.LoadBalancing{
+			SelfUUID:     "single-node",
+			UUIDs:        map[string]string{"localhost": "single-node"},
+			Assignements: map[int]string{0: "single-node"},
+		}
+	}
+	res := &leto.LoadBalancing{
+		SelfUUID:     uuid.New().String(),
+		UUIDs:        make(map[string]string),
+		Assignements: make(map[int]string),
+	}
+	res.UUIDs["localhost"] = res.SelfUUID
+	res.Assignements[0] = res.SelfUUID
+	for i, s := range c.Slaves {
+		uuid := uuid.New().String()
+		res.UUIDs[s] = uuid
+		res.Assignements[i+1] = uuid
+	}
+	return res
+}
+
+func fetchCameraResolution(stubPaths *[]string) (int, int, error) {
+	cmd := exec.Command("artemis", "--fetch-resolution")
+	if stubPaths != nil && len(*stubPaths) > 0 {
+		cmd.Args = append(cmd.Args, "--stub-image-paths", strings.Join(*stubPaths, ","))
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, 0, fmt.Errorf("could not determine camera resolution from artemis: %s", err)
+	}
+	width := 0
+	height := 0
+	_, err = fmt.Sscanf(string(out), "%d %d", &width, &height)
+	if err != nil {
+		return 0, 0, fmt.Errorf("could not scan artemis output '%s': %w", string(out), err)
+	}
+	return width, height, nil
+
+}
+
+func newWorkloadBalance(lb *leto.LoadBalancing, FPS float64) *WorkloadBalance {
+	wb := &WorkloadBalance{
+		FPS:        FPS,
+		MasterUUID: lb.UUIDs["localhost"],
+		Stride:     len(lb.Assignements),
+		IDsByUUID:  make(map[string][]bool),
+	}
+
+	for id, uuid := range lb.Assignements {
+		if _, ok := wb.IDsByUUID[uuid]; ok == false {
+			wb.IDsByUUID[uuid] = make([]bool, len(lb.Assignements))
+		}
+		wb.IDsByUUID[uuid][id] = true
+
+	}
+	return wb
+}
+
+func (c *ExperimentConfiguration) setUpTestMode() {
+	if c.Tracking.ExperimentName == "" || c.Tracking.ExperimentName == "TEST-MODE" {
+		c.TestMode = true
+		c.Tracking.ExperimentName = "TEST-MODE"
+	} else {
+		c.TestMode = false
+	}
+}
+
+func (c *ExperimentConfiguration) experimentDestination() string {
+	if c.TestMode == true {
+		return filepath.Join(os.TempDir(), "fort-tests")
+	}
+	return filepath.Join(xdg.DataHome, "fort-experiments")
+}
+
+func (c *ExperimentConfiguration) computeExperimentDir() error {
+	basename := filepath.Join(c.experimentDestination(), c.Tracking.ExperimentName)
+	var err error
+	c.ExperimentDir, _, err = FilenameWithoutOverwrite(basename)
+	return err
 }
 
 func (c *ExperimentConfiguration) antOutputDir() string {

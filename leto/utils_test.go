@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -15,14 +14,7 @@ type UtilsSuite struct {
 var _ = Suite(&UtilsSuite{})
 
 func (s *UtilsSuite) SetUpSuite(c *C) {
-	var err error
-	s.tmpDir, err = ioutil.TempDir("", "leto-utils-tests")
-
-	c.Check(err, IsNil)
-}
-
-func (s *UtilsSuite) TearDownSuite(c *C) {
-	c.Check(os.RemoveAll(s.tmpDir), IsNil)
+	s.tmpDir = c.MkDir()
 }
 
 func (s *UtilsSuite) TestNameSuffix(c *C) {
@@ -62,4 +54,11 @@ func (s *UtilsSuite) TestCreateWithoutOverwrite(c *C) {
 	_, err = os.Stat(fname)
 	c.Check(err, IsNil)
 
+}
+
+func (s *UtilsSuite) TestDoNotFailIfParentDoNotExist(c *C) {
+	fname, i, err := FilenameWithoutOverwrite(filepath.Join(s.tmpDir, "do-not-exists", "out.txt"))
+	c.Check(err, IsNil)
+	c.Check(i, Equals, 0)
+	c.Check(fname, Equals, filepath.Join(s.tmpDir, "do-not-exists", "out.0000.txt"))
 }

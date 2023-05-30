@@ -39,6 +39,5 @@ func execute() error {
 		return nil
 	}
 
-	l := &Leto{}
-	return l.Run(opts.LetoConfig())
+	return (&LetoGRPCWrapper{}).Run(opts.LetoConfig())
 }

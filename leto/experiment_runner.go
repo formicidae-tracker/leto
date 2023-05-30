@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os/exec"
 
-	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/letopb"
 )
 
@@ -15,25 +14,18 @@ type ExperimentRunner interface {
 type masterExperimentRunner struct {
 }
 
-func NewExperimentRunner(
-	nodeConfig NodeConfiguration,
-	experimentConfig *leto.TrackingConfiguration,
-) (ExperimentRunner, error) {
-	if nodeConfig.IsMaster() == false {
-		return newSlaveExperimentRunner(nodeConfig, experimentConfig)
+func NewExperimentRunner(config ExperimentConfiguration) (ExperimentRunner, error) {
+	if config.Node.IsMaster() == false {
+		return newSlaveExperimentRunner(config)
 	}
-	return newMasterExperimentRunner(nodeConfig, experimentConfig)
+	return newMasterExperimentRunner(config)
 }
 
-func newSlaveExperimentRunner(nodeConfig NodeConfiguration,
-	experimentConfig *leto.TrackingConfiguration,
-) (ExperimentRunner, error) {
+func newSlaveExperimentRunner(config ExperimentConfiguration) (ExperimentRunner, error) {
 	return &slaveExperimentRunner{}, nil
 }
 
-func newMasterExperimentRunner(nodeConfig NodeConfiguration,
-	experimentConfig *leto.TrackingConfiguration,
-) (ExperimentRunner, error) {
+func newMasterExperimentRunner(config ExperimentConfiguration) (ExperimentRunner, error) {
 	return nil, errors.New("not implemented")
 }
 
