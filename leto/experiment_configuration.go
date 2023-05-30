@@ -162,8 +162,9 @@ func (c *ExperimentConfiguration) computeExperimentDir() error {
 	return err
 }
 
-func (c *ExperimentConfiguration) antOutputDir() string {
-	return filepath.Join(c.ExperimentDir, "ants")
+func (c *ExperimentConfiguration) Path(p ...string) string {
+	p = append([]string{c.ExperimentDir}, p...)
+	return filepath.Join(p...)
 }
 
 func (c *ExperimentConfiguration) TrackingCommandArgs() []string {
@@ -214,7 +215,7 @@ func (c *ExperimentConfiguration) TrackingCommandArgs() []string {
 		args = append(args, "--video-output-to-stdout")
 		args = append(args, "--video-output-height", "1080")
 		args = append(args, "--video-output-add-header")
-		args = append(args, "--new-ant-output-dir", c.antOutputDir(),
+		args = append(args, "--new-ant-output-dir", c.Path("ants"),
 			"--new-ant-roi-size", fmt.Sprintf("%d", *c.Tracking.NewAntOutputROISize),
 			"--image-renew-period", fmt.Sprintf("%s", c.Tracking.NewAntRenewPeriod))
 
