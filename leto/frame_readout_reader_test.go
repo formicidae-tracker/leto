@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"flag"
+	"io"
 	"math"
 	"math/rand"
 	"testing"
@@ -13,8 +15,15 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
+var logstostderr = flag.Bool("logstostderr", false, "leaves module log to stderr, otherwise it will be discarded")
+
 // Hook up gocheck into the "go test" runner.
-func Test(t *testing.T) { TestingT(t) }
+func Test(t *testing.T) {
+	if *logstostderr == false {
+		logOut = io.Discard
+	}
+	TestingT(t)
+}
 
 type FrameReadoutReaderSuite struct{}
 
@@ -22,7 +31,7 @@ var _ = Suite(&FrameReadoutReaderSuite{})
 
 func (s *FrameReadoutReaderSuite) TestHelloWorld(c *C) {
 	testdata := []*hermes.FrameReadout{
-		&hermes.FrameReadout{
+		{
 			Timestamp:    0,
 			FrameID:      0,
 			Tags:         nil,
@@ -30,7 +39,7 @@ func (s *FrameReadoutReaderSuite) TestHelloWorld(c *C) {
 			Error:        hermes.FrameReadout_NO_ERROR,
 			ProducerUuid: "foo",
 		},
-		&hermes.FrameReadout{
+		{
 			Timestamp:    100000,
 			FrameID:      42,
 			Tags:         nil,

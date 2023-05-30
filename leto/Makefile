@@ -5,7 +5,7 @@ leto: *.go ../*.go ../letopb/*.go ../letopb/*.proto
 	go build
 
 check:
-	go test
+	go test -coverprofile=cover.out -check.v1
 	go vet
 
 clean:

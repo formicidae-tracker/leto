@@ -11,6 +11,7 @@ import (
 type ServerSuite struct {
 	server *Server
 	cancel func()
+	err    <-chan error
 }
 
 var _ = Suite(&ServerSuite{})
@@ -21,31 +22,18 @@ func (s *ServerSuite) SetUpTest(c *C) {
 	var err error
 	s.server, err = NewServer(ctx, 12345, "[leto-tests]: ", 20*time.Millisecond)
 	c.Assert(err, IsNil)
-	s.server.Start()
+	s.err = Start(s.server)
 }
 
 func (s *ServerSuite) TearDownTest(c *C) {
 	s.cancel()
-	err, ok := <-s.server.Done()
+	err, ok := <-s.err
 	if ok == false {
 		// already closed by test, nothing to check
 		return
 	}
 	// if not closed by tests, no error should happen
 	c.Check(err, IsNil)
-}
-
-func (s *ServerSuite) TestOnCloseOnShutdown(c *C) {
-	closed := make(chan struct{})
-	s.server.onClose = func() { close(closed) }
-
-	s.cancel()
-	select {
-	case <-time.After(100 * time.Millisecond):
-		c.Fatalf("server never called onClose")
-	case <-closed:
-		return
-	}
 }
 
 func (s *ServerSuite) TestDoesNotWaitOnAllClosedConnection(c *C) {
@@ -56,7 +44,7 @@ func (s *ServerSuite) TestDoesNotWaitOnAllClosedConnection(c *C) {
 	select {
 	case <-time.After(1 * time.Millisecond):
 		c.Fatalf("server waited on closed connection")
-	case err := <-s.server.Done():
+	case err := <-s.err:
 		c.Check(err, IsNil)
 	}
 }
@@ -84,13 +72,13 @@ func (s *ServerSuite) TestClosesAllConnectionAfterGrace(c *C) {
 	s.cancel()
 
 	select {
-	case <-s.server.Done():
+	case <-s.err:
 		c.Errorf("server done before connection closed")
 	case <-done:
 	case <-time.After(40 * time.Millisecond):
 		c.Fatalf("server never close")
 	}
-	err = <-s.server.Done()
+	err = <-s.err
 	c.Check(err, IsNil)
 }
 

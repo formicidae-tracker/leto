@@ -28,7 +28,7 @@ func NewFrameReadoutWriter(filepath string) (*FrameReadoutFileWriter, error) {
 		period:   2 * time.Hour,
 		basename: filepath,
 		quit:     make(chan struct{}),
-		logger:   log.New(os.Stderr, fmt.Sprintf("[file/%s] ", filepath), log.LstdFlags),
+		logger:   NewLogger(fmt.Sprintf("file/%s", filepath)),
 	}, nil
 
 }

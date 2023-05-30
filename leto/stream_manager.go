@@ -115,7 +115,7 @@ func NewVideoManager(basedir string, fps float64, config leto.StreamConfiguratio
 		quality:           *config.Quality,
 		tune:              *config.Tune,
 		period:            2 * time.Hour,
-		logger:            log.New(os.Stderr, "[stream] ", 0),
+		logger:            NewLogger("stream"),
 	}
 	if err := res.Check(); err != nil {
 		return nil, err

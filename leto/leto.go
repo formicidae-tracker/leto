@@ -153,7 +153,7 @@ func (l *Leto) Run(config leto.Config) error {
 
 	l.artemis.LoadFromPersistentFile()
 
-	l.logger = log.New(os.Stderr, "[gRPC] ", 0)
+	l.logger = NewLogger("gRPC")
 
 	addr := fmt.Sprintf(":%d", config.LetoPort)
 	lis, err := net.Listen("tcp", addr)

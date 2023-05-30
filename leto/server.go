@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"sync"
 	"time"
 )
@@ -18,16 +17,14 @@ type Server struct {
 	connections sync.Map
 	ctx         context.Context
 
-	err      chan error
 	listener net.Listener
 	logger   *log.Logger
 
 	onAccept func(context.Context, net.Conn)
-	onClose  func()
 }
 
-func NewServer(ctx context.Context, port int, logPrefix string, grace time.Duration) (*Server, error) {
-	logger := log.New(os.Stderr, logPrefix, 0)
+func NewServer(ctx context.Context, port int, domain string, grace time.Duration) (*Server, error) {
+	logger := NewLogger(domain)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -37,10 +34,8 @@ func NewServer(ctx context.Context, port int, logPrefix string, grace time.Durat
 
 	s := &Server{
 		ctx:      ctx,
-		err:      make(chan error),
 		listener: listener,
 		logger:   logger,
-		onClose:  func() {},
 		onAccept: func(context.Context, net.Conn) {},
 	}
 
@@ -85,21 +80,12 @@ func (s *Server) waitAllDone(grace time.Duration) bool {
 	}
 }
 
-func (s *Server) Start() {
-	go func() {
-		defer close(s.err)
-		s.err <- s.loop()
-	}()
-}
-
-func (s *Server) Done() <-chan error {
-	return s.err
-}
-
-func (s *Server) loop() error {
+// Run loops over all incoming connections and call onAccept on them
+// in a new go routine. Run() will returns after the ctx will be
+// cancelled, and all onAccept returned.
+func (s *Server) Run() error {
 	defer func() {
 		s.wg.Wait()
-		s.onClose()
 	}()
 
 	for {

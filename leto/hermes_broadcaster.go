@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
-	"os"
 	"sync"
 	"time"
 
@@ -14,7 +12,7 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-type HermesBroadcasterTask interface {
+type HermesBroadcaster interface {
 	Task
 	Incoming() chan<- *hermes.FrameReadout
 }
@@ -33,9 +31,9 @@ func (b *hermesBroadcaster) Incoming() chan<- *hermes.FrameReadout {
 	return b.incoming
 }
 
-func (b *hermesBroadcaster) Start() {
+func (b *hermesBroadcaster) Run() error {
 	go b.incomingLoop()
-	b.server.Start()
+	return b.server.Run()
 }
 
 func (b *hermesBroadcaster) incomingLoop() {
@@ -70,20 +68,18 @@ func (b *hermesBroadcaster) closeAllOutgoing() {
 	b.outgoing = nil
 }
 
-func (b *hermesBroadcaster) Done() <-chan error {
-	return b.server.Done()
-}
-
-func NewHermesBroadcaster(ctx context.Context, port int, idle time.Duration) (HermesBroadcasterTask, error) {
-	server, err := NewServer(ctx, port, "[broadcast]: ", 1*time.Second)
+func NewHermesBroadcaster(ctx context.Context, port int, idle time.Duration) (HermesBroadcaster, error) {
+	server, err := NewServer(ctx, port, "broadcast", 1*time.Second)
 	if err != nil {
 		return nil, err
 	}
 	res := &hermesBroadcaster{
 		server:   server,
-		incoming: make(chan *hermes.FrameReadout),
+		incoming: make(chan *hermes.FrameReadout, 10),
+		outgoing: make(map[int]chan []byte),
 		idle:     idle,
 	}
+	res.server.onAccept = res.onAccept
 	return res, nil
 }
 
@@ -104,7 +100,7 @@ func (h *hermesBroadcaster) unregister(id int) {
 }
 
 func (h *hermesBroadcaster) onAccept(ctx context.Context, conn net.Conn) {
-	logger := log.New(os.Stderr, fmt.Sprintf("[broadcast/%s]: ", conn.RemoteAddr()), 0)
+	logger := NewLogger(fmt.Sprintf("broadcast/%s", conn.RemoteAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
 			logger.Printf("could not close connection: %s", err)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 
@@ -27,10 +26,6 @@ func (o *Options) LetoConfig() leto.Config {
 	}
 	return res
 }
-
-type Leto struct{}
-
-func (l Leto) Run(interface{}) error { return errors.New("I am broken") }
 
 func execute() error {
 	opts := &Options{}

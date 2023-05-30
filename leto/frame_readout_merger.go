@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"sort"
 	"time"
 
@@ -143,7 +141,7 @@ func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout,
 	betweenFrame := time.Duration(1.0e9/wb.FPS) * time.Nanosecond
 	timeout := time.Duration(2*wb.Stride+2) * betweenFrame
 
-	logger := log.New(os.Stderr, "[FrameReadoutMerger] ", 0)
+	logger := NewLogger("FrameReadoutMerger")
 	logger.Printf("next frame timeout: %s", timeout)
 	for {
 		var timer *time.Timer = nil

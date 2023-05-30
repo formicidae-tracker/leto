@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,9 +35,14 @@ type ArtemisManager struct {
 	incoming, merged, file, broadcast chan *hermes.FrameReadout
 	mx                                sync.Mutex
 	wg, artemisWg, trackerWg          sync.WaitGroup
-	fileWriter                        *FrameReadoutFileWriter
-	trackers                          *Server
-	nodeConfig                        NodeConfiguration
+
+	ctx    context.Context
+	cancel func()
+
+	fileWriter  *FrameReadoutFileWriter
+	trackers    ArtemisListener
+	broadcaster HermesBroadcaster
+	nodeConfig  NodeConfiguration
 
 	artemisCmd   *exec.Cmd
 	artemisOut   *io.PipeWriter
@@ -86,10 +90,14 @@ func NewArtemisManager(letoConfig leto.Config) (*ArtemisManager, error) {
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &ArtemisManager{
 		nodeConfig: nodeConfig,
-		logger:     log.New(os.Stderr, "[artemis] ", 0),
+		logger:     NewLogger("artemis"),
 		letoConfig: letoConfig,
+		ctx:        ctx,
+		cancel:     cancel,
 	}, nil
 }
 
@@ -512,8 +520,6 @@ func (m *ArtemisManager) setUpExperimentAsMaster() error {
 		return err
 	}
 
-	m.trackers = NewRemoteManager()
-
 	if err := m.setUpStreamTask(); err != nil {
 		return err
 	}
@@ -599,23 +605,36 @@ func (m *ArtemisManager) spawnFrameReadoutDispatchTask() {
 func (m *ArtemisManager) spawnTrackerListenTask() {
 	m.trackerWg.Add(1)
 	go func() {
-		err := m.trackers.Listen(fmt.Sprintf(":%d", m.letoConfig.ArtemisIncomingPort), m.onTrackerAccept(), func() {
-			m.logger.Printf("All connection closed, cleaning up experiment")
-		})
+		defer m.trackerWg.Done()
+		var err error
+		m.trackers, err = NewArtemisListener(m.ctx, m.letoConfig.ArtemisIncomingPort)
+		if err != nil {
+			m.logger.Printf("could not listen: %s", err)
+			return
+		}
+
+		err = m.trackers.Run()
 		if err != nil {
 			m.logger.Printf("listening for tracker unhandled error: %s", err)
+		} else {
+			m.logger.Printf("All connection closed, cleaning up experiment")
 		}
-		m.trackerWg.Done()
 	}()
 }
 
 func (m *ArtemisManager) spawnFrameReadoutBroadCastTask() {
 	m.wg.Add(1)
 	go func() {
-		BroadcastFrameReadout(fmt.Sprintf(":%d", m.letoConfig.HermesBroadcastPort),
-			m.broadcast,
-			3*time.Duration(1.0e6/(*m.experimentConfig.Camera.FPS))*time.Microsecond)
-		m.wg.Done()
+		defer m.wg.Done()
+		broadcaster, err := NewHermesBroadcaster(m.ctx, m.letoConfig.HermesBroadcastPort, 3*time.Duration(1.0e6/(*m.experimentConfig.Camera.FPS))*time.Microsecond)
+		if err != nil {
+			m.logger.Printf("could not broadcast frames: %s", err)
+			return
+		}
+		err = broadcaster.Run()
+		if err != nil {
+			m.logger.Printf("broadcast unhandled error: %s", err)
+		}
 	}()
 }
 
@@ -703,12 +722,8 @@ func (m *ArtemisManager) spawnMasterSubTasks() {
 
 func (m *ArtemisManager) tearDownTrackerListenTask() {
 	//Stops the reading of frame readout, it will close all the chain
-	if m.trackers != nil {
-		err := m.trackers.Close()
-		if err != nil {
-			m.logger.Printf("Could not close connections: %s", err)
-		}
-	}
+	m.cancel()
+
 	m.logger.Printf("Waiting for all tracker connections to be closed")
 
 	m.trackerWg.Wait()
@@ -879,20 +894,6 @@ func (m *ArtemisManager) buildTrackingCommand() *exec.Cmd {
 	cmd.Stderr = nil
 	cmd.Stdin = nil
 	return cmd
-}
-
-func (m *ArtemisManager) onTrackerAccept() func(c net.Conn) {
-	return func(c net.Conn) {
-		errors := make(chan error)
-		logger := log.New(os.Stderr, fmt.Sprintf("[artemis/%s] ", c.RemoteAddr().String()), 0)
-		logger.Printf("new connection from %s", c.RemoteAddr().String())
-		go func() {
-			for e := range errors {
-				logger.Printf("unhandled error: %s", e)
-			}
-		}()
-		FrameReadoutReadAll(c, m.incoming, errors)
-	}
 }
 
 func newExperimentLog(hasError bool,
