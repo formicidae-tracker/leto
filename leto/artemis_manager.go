@@ -339,7 +339,7 @@ func (m *ArtemisManager) isStarted() bool {
 
 func (m *ArtemisManager) setUpExperiment(user *leto.TrackingConfiguration) error {
 	var err error
-	m.experimentConfig, err = NewExperimentConfiguration(m.letoConfig, m.nodeConfig, user)
+	m.experimentConfig, err = NewExperimentConfiguration(context.TODO(), m.letoConfig, m.nodeConfig, user)
 	if err != nil {
 		return err
 	}

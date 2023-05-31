@@ -141,8 +141,7 @@ func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout,
 	betweenFrame := time.Duration(1.0e9/wb.FPS) * time.Nanosecond
 	timeout := time.Duration(2*wb.Stride+2) * betweenFrame
 
-	logger := NewLogger("FrameReadoutMerger")
-	logger.Printf("next frame timeout: %s", timeout)
+	logger := NewLogger("frame-merger")
 	for {
 		var timer *time.Timer = nil
 		var timeoutC <-chan time.Time = nil
@@ -174,7 +173,7 @@ func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout,
 			}
 			if frame.FrameID < nextFrameToSend {
 				//we already timeouted the frame
-				logger.Printf("Received frame %d, but already sent a timeout", frame.FrameID)
+				logger.Printf("received frame %d, but already sent a timeout", frame.FrameID)
 				continue
 			}
 			delete(deadlines, frame.FrameID)
@@ -216,7 +215,7 @@ func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout,
 		//send all frames that we have received or timeouted
 		for len(buffer) > 0 {
 			if buffer[0].FrameID < nextFrameToSend {
-				logger.Printf("Inconsistent state, next frame is %d, and has %d buffered", nextFrameToSend, buffer[0].FrameID)
+				logger.Printf("inconsistent state, next frame is %d, and has %d buffered", nextFrameToSend, buffer[0].FrameID)
 				buffer = buffer[1:]
 				continue
 			}
