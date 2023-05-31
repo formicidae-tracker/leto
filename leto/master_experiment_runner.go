@@ -147,23 +147,34 @@ func (r *masterExperimentRunner) mergeFrames() func() error {
 }
 
 func (r *masterExperimentRunner) waitAnyCriticalSubtask() error {
-	criticalTask := []string{"artemis-in", "frame-merger", "frame-dispatcher", "writer", "video", "local-tracker"}
+	criticalTasks := []string{"artemis-in", "frame-merger", "frame-dispatcher", "writer", "video", "local-tracker"}
 
-	cases := make([]reflect.SelectCase, len(criticalTask))
-	for i, taskName := range criticalTask {
-		t := r.subtasks[taskName]
+	cases := make([]reflect.SelectCase, len(criticalTasks))
+	for i, name := range criticalTasks {
+		errs := r.subtasks[name]
 		cases[i] = reflect.SelectCase{
 			Dir:  reflect.SelectRecv,
-			Chan: reflect.ValueOf(t),
+			Chan: reflect.ValueOf(errs),
 		}
 	}
 
-	chosen, v, _ := reflect.Select(cases)
+	chosen, v, ok := reflect.Select(cases)
+	task := criticalTasks[chosen]
+
+	if ok == false {
+		return fmt.Errorf("logic error: channel for task %s is closed", task)
+	}
+
 	err, ok := v.Interface().(error)
 	if ok == false {
-		err = fmt.Errorf("logic error: channel for task %s is closed", criticalTask[chosen])
+		err = fmt.Errorf("logic error: task %s did not returned an error", task)
 	}
-	return fmt.Errorf("critical task %s error: %w", criticalTask[chosen], err)
+
+	if err != nil {
+		return fmt.Errorf("critical task %s error: %w", task, err)
+	}
+
+	return nil
 }
 
 func (r *masterExperimentRunner) stopAllSubtask() {
