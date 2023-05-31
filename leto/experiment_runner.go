@@ -11,20 +11,20 @@ type ExperimentRunner interface {
 	Run() (*letopb.ExperimentLog, error)
 }
 
-type slaveExperimentRunner struct {
+type slaveRunner struct {
 	env        *TrackingEnvironment
 	artemisCmd *exec.Cmd
 }
 
 func NewExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	if env.Node.IsMaster() == true {
-		return newMasterExperimentRunner(env)
+		return newMasterRunner(env)
 	}
-	return newSlaveExperimentRunner(env)
+	return newSlaveRunner(env)
 }
 
-func newSlaveExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
-	res := &slaveExperimentRunner{
+func newSlaveRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
+	res := &slaveRunner{
 		env: env,
 	}
 	var err error
@@ -35,7 +35,7 @@ func newSlaveExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error
 	return res, nil
 }
 
-func (r *slaveExperimentRunner) Run() (log *letopb.ExperimentLog, err error) {
+func (r *slaveRunner) Run() (log *letopb.ExperimentLog, err error) {
 	defer func() {
 		var terr error
 		log, terr = r.env.TearDown(err != nil)

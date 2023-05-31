@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,10 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/letopb"
 )
 
-type masterExperimentRunner struct {
+type masterRunner struct {
 	env *TrackingEnvironment
 
 	artemisCmd *exec.Cmd
@@ -35,9 +37,9 @@ type masterExperimentRunner struct {
 	logger   *log.Logger
 }
 
-func newMasterExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
+func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	ctx, cancel := context.WithCancel(env.Context)
-	res := &masterExperimentRunner{
+	res := &masterRunner{
 		env:      env,
 		subtasks: make(map[string]<-chan error),
 		ctx:      ctx,
@@ -51,7 +53,7 @@ func newMasterExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, erro
 	return res, nil
 }
 
-func (r *masterExperimentRunner) SetUp() error {
+func (r *masterRunner) SetUp() error {
 	var err error
 	r.artemisListener, err = NewArtemisListener(r.ctx, r.env.Leto.ArtemisIncomingPort)
 	if err != nil {
@@ -86,7 +88,7 @@ func (r *masterExperimentRunner) SetUp() error {
 	return err
 }
 
-func (r *masterExperimentRunner) Run() (log *letopb.ExperimentLog, err error) {
+func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 	defer func() {
 		var terr error
 		log, terr = r.env.TearDown(err != nil)
@@ -97,7 +99,7 @@ func (r *masterExperimentRunner) Run() (log *letopb.ExperimentLog, err error) {
 
 	r.startSubtasks()
 	go func() {
-		<-r.env.Context.Done()
+		<-r.ctx.Done()
 		r.artemisCmd.Process.Signal(os.Interrupt)
 	}()
 
@@ -110,7 +112,7 @@ func (r *masterExperimentRunner) Run() (log *letopb.ExperimentLog, err error) {
 	return nil, err
 }
 
-func (r *masterExperimentRunner) startSubtasks() {
+func (r *masterRunner) startSubtasks() {
 	r.startSubtask(r.artemisListener, "artemis-in")
 	r.startSubtaskFunction(r.mergeFrames(), "frame-merger")
 	r.startSubtask(r.dispatcher, "frame-dispatcher")
@@ -119,6 +121,10 @@ func (r *masterExperimentRunner) startSubtasks() {
 	r.startSubtaskFunction(func() error {
 		return r.video.Run(r.videoIn)
 	}, "video")
+
+	// slaves must be started before local tracker !!
+	r.startSlaves()
+
 	r.startSubtaskFunction(func() error {
 		defer func() {
 			err := r.artemisOut.Close()
@@ -130,23 +136,23 @@ func (r *masterExperimentRunner) startSubtasks() {
 	}, "local-tracker")
 }
 
-func (r *masterExperimentRunner) startSubtask(t Task, name string) {
+func (r *masterRunner) startSubtask(t Task, name string) {
 	s := Start(t)
 	r.subtasks[name] = s
 }
 
-func (r *masterExperimentRunner) startSubtaskFunction(f func() error, name string) {
+func (r *masterRunner) startSubtaskFunction(f func() error, name string) {
 	s := StartFunc(f)
 	r.subtasks[name] = s
 }
 
-func (r *masterExperimentRunner) mergeFrames() func() error {
+func (r *masterRunner) mergeFrames() func() error {
 	return func() error {
 		return MergeFrameReadout(r.env.Balancing, r.artemisListener.Outbound(), r.dispatcher.Incoming())
 	}
 }
 
-func (r *masterExperimentRunner) waitAnyCriticalSubtask() error {
+func (r *masterRunner) waitAnyCriticalSubtask() error {
 	criticalTasks := []string{"artemis-in", "frame-merger", "frame-dispatcher", "writer", "video", "local-tracker"}
 
 	cases := make([]reflect.SelectCase, len(criticalTasks))
@@ -177,11 +183,12 @@ func (r *masterExperimentRunner) waitAnyCriticalSubtask() error {
 	return nil
 }
 
-func (r *masterExperimentRunner) stopAllSubtask() {
+func (r *masterRunner) stopAllSubtask() {
+	r.stopSlaves()
 	r.cancel()
 }
 
-func (r *masterExperimentRunner) waitAllSubtask() {
+func (r *masterRunner) waitAllSubtask() {
 	wg := sync.WaitGroup{}
 	wg.Add(len(r.subtasks))
 
@@ -196,4 +203,64 @@ func (r *masterExperimentRunner) waitAllSubtask() {
 	}
 
 	wg.Wait()
+}
+
+func (r *masterRunner) startSlaves() {
+	if len(r.env.Node.Slaves) == 0 {
+		return
+	}
+	nl := leto.NewNodeLister()
+	nodes, err := nl.ListNodes()
+	if err != nil {
+		r.logger.Printf("could not list local nodes: %s", err)
+		return
+	}
+
+	for _, name := range r.env.Node.Slaves {
+		if err := r.startSlave(nodes, name); err != nil {
+			r.logger.Printf("could not start slave %s: %s", name, err)
+		}
+	}
+}
+
+func (r *masterRunner) stopSlaves() {
+	if len(r.env.Node.Slaves) == 0 {
+		return
+	}
+	nl := leto.NewNodeLister()
+	nodes, err := nl.ListNodes()
+	if err != nil {
+		r.logger.Printf("could not list local nodes: %s", err)
+		return
+	}
+
+	for _, name := range r.env.Node.Slaves {
+		if err := r.stopSlave(nodes, name); err != nil {
+			r.logger.Printf("could not stop slave %s: %s", name, err)
+		}
+	}
+}
+
+func (r *masterRunner) startSlave(nodes map[string]leto.Node, name string) error {
+	slave, ok := nodes[name]
+	if ok == false {
+		return errors.New("not found on the network")
+	}
+	slaveConfig := *r.env.Config
+	slaveConfig.Loads.SelfUUID = slaveConfig.Loads.UUIDs[name]
+	asYaml, err := slaveConfig.Yaml()
+	if err != nil {
+		return fmt.Errorf("could not serialize config: %s", err)
+	}
+	return slave.StartTracking(&letopb.StartRequest{
+		YamlConfiguration: string(asYaml),
+	})
+}
+
+func (r *masterRunner) stopSlave(nodes map[string]leto.Node, name string) error {
+	slave, ok := nodes[name]
+	if ok == false {
+		return errors.New("not found on the network")
+	}
+	return slave.StopTracking()
 }
