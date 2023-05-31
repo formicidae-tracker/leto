@@ -5,12 +5,7 @@ type Task interface {
 }
 
 func Start(t Task) <-chan error {
-	err := make(chan error)
-	go func() {
-		defer close(err)
-		err <- t.Run()
-	}()
-	return err
+	return StartFunc(t.Run)
 }
 
 func StartFunc(f func() error) <-chan error {
