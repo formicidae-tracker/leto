@@ -270,6 +270,10 @@ func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
 		return nil, err
 	}
 
+	if err := e.saveLocalConfig(); err != nil {
+		return nil, err
+	}
+
 	return e.buildArtemisCommand()
 }
 
@@ -282,6 +286,10 @@ func (e *TrackingEnvironment) makeAllDestinationDirs() error {
 		return fmt.Errorf("could not create %s: %w", target, err)
 	}
 	return nil
+}
+
+func (e *TrackingEnvironment) saveLocalConfig() error {
+	return e.Config.WriteConfiguration(e.Path("leto-final-config.yaml"))
 }
 
 func (e *TrackingEnvironment) buildArtemisCommand() (*exec.Cmd, error) {
