@@ -58,7 +58,7 @@ type ArtemisManager struct {
 
 	lastExperimentLog *letopb.ExperimentLog
 	letoConfig        leto.Config
-	experimentConfig  *ExperimentConfiguration
+	experimentConfig  *TrackingEnvironment
 }
 
 func NewArtemisManager(letoConfig leto.Config) (*ArtemisManager, error) {
@@ -107,7 +107,7 @@ func (m *ArtemisManager) Status() *letopb.Status {
 		Experiment: nil,
 	}
 
-	yamlConfig, err := m.experimentConfig.Tracking.Yaml()
+	yamlConfig, err := m.experimentConfig.Config.Yaml()
 	if err != nil {
 		yamlConfig = []byte(fmt.Sprintf("Could not generate yaml config: %s", err))
 	}
@@ -185,7 +185,7 @@ func (m *ArtemisManager) SetMaster(hostname string) error {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 	if m.isStarted() == true {
-		return fmt.Errorf("Could not change master/slave configuration while experiment %s is running", m.experimentConfig.Tracking.ExperimentName)
+		return fmt.Errorf("Could not change master/slave configuration while experiment %s is running", m.experimentConfig.Config.ExperimentName)
 	}
 	return m.setMaster(hostname)
 }
@@ -218,7 +218,7 @@ func (m *ArtemisManager) AddSlave(hostname string) (err error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 	if m.isStarted() == true {
-		return fmt.Errorf("Could not change master/slave configuration while experiment %s is running", m.experimentConfig.Tracking.ExperimentName)
+		return fmt.Errorf("Could not change master/slave configuration while experiment %s is running", m.experimentConfig.Config.ExperimentName)
 	}
 
 	return m.addSlave(hostname)
@@ -248,7 +248,7 @@ func (m *ArtemisManager) RemoveSlave(hostname string) (err error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
 	if m.isStarted() == true {
-		return fmt.Errorf("Could not change master/slave configuration while experiment %s is running", m.experimentConfig.Tracking.ExperimentName)
+		return fmt.Errorf("Could not change master/slave configuration while experiment %s is running", m.experimentConfig.Config.ExperimentName)
 	}
 	return m.removeSlave(hostname)
 }
@@ -395,8 +395,8 @@ func (m *ArtemisManager) setUpStreamTask() error {
 	m.artemisCmd.Stdout = m.artemisOut
 	m.videoManager, err = NewVideoManager(
 		m.experimentConfig.ExperimentDir,
-		*m.experimentConfig.Tracking.Camera.FPS/float64(m.experimentConfig.Balancing.Stride),
-		m.experimentConfig.Tracking.Stream,
+		*m.experimentConfig.Config.Camera.FPS/float64(m.experimentConfig.Balancing.Stride),
+		m.experimentConfig.Config.Stream,
 	)
 	return err
 }
@@ -430,7 +430,7 @@ func (m *ArtemisManager) setUpExperimentAsMaster() error {
 func (m *ArtemisManager) backUpConfigToExperimentDir() error {
 	//save the config to the experiment dir
 	confSaveName := filepath.Join(m.experimentConfig.ExperimentDir, "leto-final-config.yml")
-	return m.experimentConfig.Tracking.WriteConfiguration(confSaveName)
+	return m.experimentConfig.Config.WriteConfiguration(confSaveName)
 }
 
 func (m *ArtemisManager) setUpTrackerTask() error {
@@ -504,7 +504,7 @@ func (m *ArtemisManager) spawnFrameReadoutBroadCastTask() {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
-		broadcaster, err := NewHermesBroadcaster(m.ctx, m.letoConfig.HermesBroadcastPort, 3*time.Duration(1.0e6/(*m.experimentConfig.Tracking.Camera.FPS))*time.Microsecond)
+		broadcaster, err := NewHermesBroadcaster(m.ctx, m.letoConfig.HermesBroadcastPort, 3*time.Duration(1.0e6/(*m.experimentConfig.Config.Camera.FPS))*time.Microsecond)
 		if err != nil {
 			m.logger.Printf("could not broadcast frames: %s", err)
 			return
@@ -552,7 +552,7 @@ func (m *ArtemisManager) startSlavesTrackers() {
 			continue
 		}
 
-		slaveConfig := *m.experimentConfig.Tracking
+		slaveConfig := *m.experimentConfig.Config
 		slaveConfig.Loads.SelfUUID = slaveConfig.Loads.UUIDs[slaveName]
 		asYaml, err := slaveConfig.Yaml()
 		if err != nil {
@@ -659,13 +659,13 @@ func (m *ArtemisManager) tearDownExperiment(err error) {
 		m.removePersistentFile()
 	}
 
-	m.lastExperimentLog = newExperimentLog(err != nil, m.since, m.experimentConfig.Tracking, m.experimentConfig.ExperimentDir)
+	m.lastExperimentLog = newExperimentLog(err != nil, m.since, m.experimentConfig.Config, m.experimentConfig.ExperimentDir)
 
 	// Why two cleanup ?
 	m.tearDownTrackerListenTask()
 	m.tearDownSubTasks()
 
-	m.logger.Printf("Experiment '%s' done", m.experimentConfig.Tracking.ExperimentName)
+	m.logger.Printf("Experiment '%s' done", m.experimentConfig.Config.ExperimentName)
 
 	if m.testMode == true {
 		log.Printf("Cleaning '%s'", m.experimentConfig.ExperimentDir)
@@ -678,7 +678,7 @@ func (m *ArtemisManager) tearDownExperiment(err error) {
 }
 
 func (m *ArtemisManager) spawnLocalTracker() {
-	m.logger.Printf("Starting tracking for '%s'", m.experimentConfig.Tracking.ExperimentName)
+	m.logger.Printf("Starting tracking for '%s'", m.experimentConfig.Config.ExperimentName)
 	m.since = time.Now()
 
 	m.artemisWg.Add(1)
@@ -804,7 +804,7 @@ func (m *ArtemisManager) registerOlympusE() (err error) {
 	if m.stopRegistration != nil || m.registrationEnded != nil {
 		return errors.New("registration loop already started")
 	}
-	olympusHost := m.experimentConfig.Tracking.Stream.Host
+	olympusHost := m.experimentConfig.Config.Stream.Host
 	if olympusHost == nil || len(*olympusHost) == 0 {
 		return errors.New("no olympus host defined in configuration")
 	}
@@ -821,7 +821,7 @@ func (m *ArtemisManager) registerOlympusE() (err error) {
 
 	declaration := &olympuspb.TrackingDeclaration{
 		Hostname:       hostname,
-		ExperimentName: m.experimentConfig.Tracking.ExperimentName,
+		ExperimentName: m.experimentConfig.Config.ExperimentName,
 		StreamServer:   *olympusHost,
 	}
 
