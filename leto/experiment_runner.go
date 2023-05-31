@@ -9,7 +9,6 @@ import (
 
 type ExperimentRunner interface {
 	Run() (*letopb.ExperimentLog, error)
-	Stop()
 }
 
 type slaveExperimentRunner struct {
@@ -44,9 +43,9 @@ func (r *slaveExperimentRunner) Run() (log *letopb.ExperimentLog, err error) {
 			err = terr
 		}
 	}()
+	go func() {
+		<-r.env.Context.Done()
+		r.artemisCmd.Process.Signal(os.Interrupt)
+	}()
 	return nil, r.artemisCmd.Run()
-}
-
-func (r *slaveExperimentRunner) Stop() {
-	r.artemisCmd.Process.Signal(os.Interrupt)
 }

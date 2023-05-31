@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -30,9 +31,10 @@ type TrackingEnvironment struct {
 	ExperimentDir string
 	Leto          leto.Config
 	Start         time.Time
+	Context       context.Context
 }
 
-func NewExperimentConfiguration(leto leto.Config, node NodeConfiguration, user *leto.TrackingConfiguration) (*TrackingEnvironment, error) {
+func NewExperimentConfiguration(ctx context.Context, leto leto.Config, node NodeConfiguration, user *leto.TrackingConfiguration) (*TrackingEnvironment, error) {
 	tracking, err := finalizeTracking(user, node)
 	if err != nil {
 		return nil, err
@@ -45,6 +47,7 @@ func NewExperimentConfiguration(leto leto.Config, node NodeConfiguration, user *
 		Config:    tracking,
 		Balancing: balancing,
 		Leto:      leto,
+		Context:   ctx,
 	}
 
 	res.setUpTestMode()
