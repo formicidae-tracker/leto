@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,7 +66,7 @@ func (cmd *FFMpegCommand) Wait() error {
 	return cmd.ecmd.Wait()
 }
 
-type VideoManager interface {
+type VideoTask interface {
 	Run(io.ReadCloser) error
 }
 
@@ -170,7 +169,7 @@ type videoTask struct {
 	logger *log.Logger
 }
 
-func NewVideoManager(basedir string, fps float64, config leto.StreamConfiguration) (VideoManager, error) {
+func NewVideoManager(basedir string, fps float64, config leto.StreamConfiguration) (VideoTask, error) {
 	conf, err := newVideoTaskConfig(basedir, fps, config)
 	if err != nil {
 		return nil, err
@@ -253,22 +252,6 @@ func TeeCopy(dst, dstErrorIgnored io.Writer, src io.Reader) (int64, error) {
 		n += int64(nr)
 
 	}
-}
-
-type ByteSize int64
-
-var prefixes = []string{"", "ki", "Mi", "Gi", "Ti", "Pi", "Zi"}
-
-func (s ByteSize) String() string {
-	v := float64(s)
-	prefix := ""
-	for _, prefix = range prefixes {
-		if math.Abs(v) <= 1024.0 {
-			break
-		}
-		v /= 1024.0
-	}
-	return fmt.Sprintf("%.1f %sB", v, prefix)
 }
 
 func (s *videoTask) copyToSave() (int64, error) {

@@ -45,7 +45,7 @@ type ArtemisManager struct {
 	artemisCmd      *exec.Cmd
 	artemisOut      *io.PipeWriter
 	videoIn         *io.PipeReader
-	videoManager    VideoManager
+	videoManager    VideoTask
 	videoManagerErr <-chan error
 	testMode        bool
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -29,4 +30,20 @@ func FilenameWithoutOverwrite(fpath string) (string, int, error) {
 		}
 		iter += 1
 	}
+}
+
+type ByteSize int64
+
+var prefixes = []string{"", "ki", "Mi", "Gi", "Ti", "Pi", "Zi"}
+
+func (s ByteSize) String() string {
+	v := float64(s)
+	prefix := ""
+	for _, prefix = range prefixes {
+		if math.Abs(v) <= 1024.0 {
+			break
+		}
+		v /= 1024.0
+	}
+	return fmt.Sprintf("%.1f %sB", v, prefix)
 }

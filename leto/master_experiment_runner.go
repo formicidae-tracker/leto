@@ -22,7 +22,7 @@ type masterExperimentRunner struct {
 	artemisListener   ArtemisListener
 	hermesBroadcaster HermesBroadcaster
 	fileWriter        HermesFileWriter
-	video             VideoManager
+	video             VideoTask
 	dispatcher        FrameDispatcher
 
 	ctx    context.Context
