@@ -15,7 +15,7 @@ func fsStat(path string) (free int64, total int64, err error) {
 
 	err = unix.Statfs(path, &stat)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("could not get available size for %s: %w", path, err)
 	}
 
 	return int64(stat.Bfree * uint64(stat.Bsize)), int64(stat.Blocks * uint64(stat.Bsize)), nil
@@ -30,6 +30,7 @@ type diskWatcher struct {
 	ctx     context.Context
 	olympus OlympusTask
 	update  *olympuspb.AlarmUpdate
+	period  time.Duration
 }
 
 func NewDiskWatcher(ctx context.Context, env *TrackingEnvironment, olympus OlympusTask) DiskWatcher {
@@ -37,11 +38,12 @@ func NewDiskWatcher(ctx context.Context, env *TrackingEnvironment, olympus Olymp
 		env:     env,
 		ctx:     ctx,
 		olympus: olympus,
+		period:  5 * time.Second,
 	}
 }
 
 func (w *diskWatcher) Run() error {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(w.period)
 	defer ticker.Stop()
 
 	for {
