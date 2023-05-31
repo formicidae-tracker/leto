@@ -1,11 +1,7 @@
 package main
 
-type DiskStatus struct {
-	total_bytes      int64
-	free_bytes       int64
-	bytes_per_second int64
-}
+import "errors"
 
-type DiskWatcher interface {
-	Status() (DiskStatus, error)
+func fsStat(path string) (int64, int64, error) {
+	return 0, 0, errors.New("not yet implemented")
 }

@@ -18,7 +18,7 @@ import (
 
 type LetoGRPCWrapper struct {
 	letopb.UnimplementedLetoServer
-	artemis *ArtemisManager
+	artemis *Leto
 	logger  *log.Logger
 }
 
@@ -146,7 +146,7 @@ func (l *LetoGRPCWrapper) Run(config leto.Config) error {
 		return err
 	}
 
-	l.artemis, err = NewArtemisManager(config)
+	l.artemis, err = NewLeto(config)
 	if err != nil {
 		return err
 	}

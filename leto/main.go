@@ -17,6 +17,7 @@ func main() {
 type Options struct {
 	Version bool `short:"V" long:"version" description:"Print version and exists"`
 	RPCPort *int `long:"rpc-port" description:"Port to use for RPC incoming call"`
+	Devmode bool `long:"dev" description:"development mode to bypass some checks"`
 }
 
 func (o *Options) LetoConfig() leto.Config {
@@ -24,6 +25,7 @@ func (o *Options) LetoConfig() leto.Config {
 	if o.RPCPort != nil {
 		res.LetoPort = *o.RPCPort
 	}
+	res.DevMode = o.Devmode
 	return res
 }
 

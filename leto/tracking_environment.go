@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -24,14 +25,15 @@ import (
 // be put), and TearDown() will compute the letopb.ExperimentLog once
 // done,
 type TrackingEnvironment struct {
-	Node          NodeConfiguration
-	Config        *leto.TrackingConfiguration
-	Balancing     *WorkloadBalance
-	TestMode      bool
-	ExperimentDir string
-	Leto          leto.Config
-	Start         time.Time
-	Context       context.Context
+	Node           NodeConfiguration
+	Config         *leto.TrackingConfiguration
+	Balancing      *WorkloadBalance
+	TestMode       bool
+	ExperimentDir  string
+	Leto           leto.Config
+	Start          time.Time
+	FreeStartBytes int64
+	Context        context.Context
 }
 
 func NewExperimentConfiguration(ctx context.Context, leto leto.Config, node NodeConfiguration, user *leto.TrackingConfiguration) (*TrackingEnvironment, error) {
@@ -264,13 +266,21 @@ func (e *TrackingEnvironment) TrackingCommandArgs() []string {
 }
 
 func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
-	defer func() { e.Start = time.Now() }()
+	defer func() {
+		e.Start = time.Now()
+	}()
 
 	if err := e.makeAllDestinationDirs(); err != nil {
 		return nil, err
 	}
 
 	if err := e.saveLocalConfig(); err != nil {
+		return nil, err
+	}
+
+	var err error
+	e.FreeStartBytes, _, err = fsStat(e.ExperimentDir)
+	if err != nil {
 		return nil, err
 	}
 
@@ -354,4 +364,20 @@ func (e *TrackingEnvironment) buildLog(hasError bool) *letopb.ExperimentLog {
 		Log:               string(log),
 		Stderr:            string(stderr),
 	}
+}
+
+func (e *TrackingEnvironment) watchDisk() (free int64, total int64, bps int64, err error) {
+	if e.Start.Equal(time.Time{}) {
+		return 0, 0, 0, errors.New("environment not setup")
+	}
+
+	free, total, err = fsStat(e.ExperimentDir)
+	if err != nil {
+		return free, total, 0, err
+	}
+	ellapsed := time.Now().Sub(e.Start).Seconds()
+	written := e.FreeStartBytes - free
+	bps = int64(float64(written) / ellapsed)
+
+	return free, total, bps, nil
 }

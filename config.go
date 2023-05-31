@@ -9,6 +9,7 @@ type Config struct {
 	ArtemisIncomingPort int
 	HermesBroadcastPort int
 	OlympusPort         int
+	DevMode             bool
 }
 
 var DefaultConfig Config

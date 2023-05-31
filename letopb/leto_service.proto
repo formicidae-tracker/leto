@@ -13,15 +13,16 @@ message ExperimentStatus {
 	google.protobuf.Timestamp since              = 1;
 	string                    experiment_dir     = 2;
 	string                    yaml_configuration = 3;
-	int64                     total_bytes        = 4;
-	int64                     free_bytes         = 5;
-	int64                     bytes_per_second   = 6;
+
 }
 
 message Status {
-	string           master     = 1;
-	repeated string  slaves     = 2;
-	ExperimentStatus experiment = 3;
+	string           master           = 1;
+	repeated string  slaves           = 2;
+	ExperimentStatus experiment       = 3;
+	int64            total_bytes      = 4;
+	int64            free_bytes       = 5;
+	int64            bytes_per_second = 6;
 }
 
 message ExperimentLog {
