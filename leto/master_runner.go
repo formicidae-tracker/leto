@@ -26,6 +26,7 @@ type masterRunner struct {
 	fileWriter        HermesFileWriter
 	video             VideoTask
 	dispatcher        FrameDispatcher
+	olympus           OlympusTask
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -84,8 +85,15 @@ func (r *masterRunner) SetUp() error {
 
 	r.artemisCmd, err = r.env.SetUp()
 	r.artemisCmd.Stdout = r.artemisOut
+	if err != nil {
+		return err
+	}
+	r.olympus, err = NewOlympusTask(r.ctx, r.env)
+	if err != nil {
+		r.logger.Printf("will not register to olympus: %s", err)
+	}
 
-	return err
+	return nil
 }
 
 func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
@@ -113,7 +121,9 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 }
 
 func (r *masterRunner) startSubtasks() {
+	r.startSubtask(NewDiskWatcher(r.ctx, r.env, r.olympus), "disk-watcher")
 	r.startSubtask(r.artemisListener, "artemis-in")
+
 	r.startSubtaskFunction(r.mergeFrames(), "frame-merger")
 	r.startSubtask(r.dispatcher, "frame-dispatcher")
 	r.startSubtask(r.fileWriter, "writer")
@@ -134,6 +144,9 @@ func (r *masterRunner) startSubtasks() {
 		}()
 		return r.artemisCmd.Run()
 	}, "local-tracker")
+	if r.olympus != nil {
+		r.startSubtask(r.olympus, "olympus-registration")
+	}
 }
 
 func (r *masterRunner) startSubtask(t Task, name string) {
@@ -153,7 +166,7 @@ func (r *masterRunner) mergeFrames() func() error {
 }
 
 func (r *masterRunner) waitAnyCriticalSubtask() error {
-	criticalTasks := []string{"artemis-in", "frame-merger", "frame-dispatcher", "writer", "video", "local-tracker"}
+	criticalTasks := []string{"artemis-in", "frame-merger", "frame-dispatcher", "writer", "video", "local-tracker", "disk-watcher"}
 
 	cases := make([]reflect.SelectCase, len(criticalTasks))
 	for i, name := range criticalTasks {

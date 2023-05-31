@@ -284,6 +284,12 @@ func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
 		return nil, err
 	}
 
+	if e.FreeStartBytes < e.Leto.DiskLimit {
+		return nil, fmt.Errorf("unsufficient disk space: available: %s minimum: %s",
+			ByteSize(e.FreeStartBytes),
+			ByteSize(e.Leto.DiskLimit))
+	}
+
 	return e.buildArtemisCommand()
 }
 
@@ -366,7 +372,7 @@ func (e *TrackingEnvironment) buildLog(hasError bool) *letopb.ExperimentLog {
 	}
 }
 
-func (e *TrackingEnvironment) watchDisk() (free int64, total int64, bps int64, err error) {
+func (e *TrackingEnvironment) WatchDisk(now time.Time) (free int64, total int64, bps int64, err error) {
 	if e.Start.Equal(time.Time{}) {
 		return 0, 0, 0, errors.New("environment not setup")
 	}
@@ -375,7 +381,7 @@ func (e *TrackingEnvironment) watchDisk() (free int64, total int64, bps int64, e
 	if err != nil {
 		return free, total, 0, err
 	}
-	ellapsed := time.Now().Sub(e.Start).Seconds()
+	ellapsed := now.Sub(e.Start).Seconds()
 	written := e.FreeStartBytes - free
 	bps = int64(float64(written) / ellapsed)
 

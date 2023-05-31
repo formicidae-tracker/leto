@@ -10,6 +10,7 @@ type Config struct {
 	HermesBroadcastPort int
 	OlympusPort         int
 	DevMode             bool
+	DiskLimit           int64
 }
 
 var DefaultConfig Config
@@ -26,5 +27,6 @@ func init() {
 		LetoPort:            4000,
 		ArtemisIncomingPort: 4001,
 		HermesBroadcastPort: 4002,
+		DiskLimit:           50 * 1024 * 1024, // 100 MiB
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/adrg/xdg"
 	"github.com/formicidae-tracker/leto"
@@ -124,7 +125,7 @@ func (l *Leto) addDiskInfoToStatus(status *letopb.Status) {
 		status.FreeBytes, status.TotalBytes, err = fsStat(xdg.DataHome)
 		return
 	}
-	status.FreeBytes, status.TotalBytes, status.BytesPerSecond, err = l.env.watchDisk()
+	status.FreeBytes, status.TotalBytes, status.BytesPerSecond, err = l.env.WatchDisk(time.Now())
 }
 
 func (l *Leto) LastExperimentLog() *letopb.ExperimentLog {
