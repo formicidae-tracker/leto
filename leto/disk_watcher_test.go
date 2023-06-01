@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/leto"
+	"github.com/formicidae-tracker/leto/leto/mock_main"
 	olympuspb "github.com/formicidae-tracker/olympus/api"
 	"github.com/golang/mock/gomock"
 	. "gopkg.in/check.v1"
@@ -21,7 +22,7 @@ type DiskWatcherSuite struct {
 	env     *TrackingEnvironment
 	watcher *diskWatcher
 	ctrl    *gomock.Controller
-	olympus *MockOlympusTask
+	olympus *mock_main.MockOlympusTask
 }
 
 var period = 20 * time.Millisecond
@@ -35,7 +36,7 @@ func (s *DiskWatcherSuite) SetUpSuite(c *C) {
 
 func (s *DiskWatcherSuite) SetUpTest(c *C) {
 	s.ctrl = gomock.NewController(c)
-	s.olympus = NewMockOlympusTask(s.ctrl)
+	s.olympus = mock_main.NewMockOlympusTask(s.ctrl)
 	s.env = &TrackingEnvironment{
 		ExperimentDir: s.Dir,
 		Leto:          leto.DefaultConfig,
@@ -67,9 +68,17 @@ func (s *DiskWatcherSuite) TestCanReadFs(c *C) {
 }
 
 func (s *DiskWatcherSuite) TestWatcherFailsWhenLimitExceed(c *C) {
+	timeout := 300 * time.Millisecond
 	s.env.Leto.DiskLimit = s.env.FreeStartBytes + 1000*1024
-	err := <-Start(s.watcher)
-	c.Check(err, ErrorMatches, "unsufficient disk space: available: .* minimum: .*")
+	s.watcher.olympus = nil
+	errs := Start(s.watcher)
+	select {
+	case err := <-errs:
+		c.Check(err, ErrorMatches, "unsufficient disk space: available: .* minimum: .*")
+	case <-time.After(timeout):
+		s.cancel()
+		c.Fatalf("disk watcher did not fail after %s", timeout)
+	}
 }
 
 func computeDiskLimit(startFreeByte int64, targetETA time.Duration) int64 {
@@ -109,6 +118,7 @@ func (m *AlarmUpdateMatches) String() string {
 }
 
 func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
+	sync := make(chan int, 3)
 
 	gomock.InOrder(
 		s.olympus.EXPECT().PushDiskStatus(gomock.Any(),
@@ -117,15 +127,16 @@ func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
 				Level:          olympuspb.AlarmLevel_WARNING,
 				Status:         olympuspb.AlarmStatus_ON,
 				Description:    "low free disk space .*, will stop in ~ 6h0m",
-			}),
-		s.olympus.EXPECT().PushDiskStatus(gomock.Any(), gomock.Nil()), // do not report same alarm twice
+			}).Do(func(x, y any) { sync <- 0 }),
+		s.olympus.EXPECT().PushDiskStatus(gomock.Any(),
+			gomock.Nil()).Do(func(x, y any) { sync <- 1 }), // do not report same alarm twice
 		s.olympus.EXPECT().PushDiskStatus(gomock.Any(), // reports when alarms stops
 			&AlarmUpdateMatches{
 				Identification: "tracking.disk_status",
 				Level:          olympuspb.AlarmLevel_WARNING,
 				Status:         olympuspb.AlarmStatus_OFF,
 				Description:    "",
-			}),
+			}).Do(func(x, y any) { sync <- 2 }),
 	)
 
 	filenames := []string{
@@ -138,17 +149,16 @@ func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
 	errs := Start(s.watcher)
 
 	//wait for first report
-	time.Sleep(time.Duration(1.2 * float64(period)))
+	<-sync
 
 	// rewrite a new file to keep same BPS, and produce the same alarm
 	ioutil.WriteFile(filenames[1], make([]byte, filesize), 0644)
-	time.Sleep(period)
+	<-sync
 
 	// removes all files to clear the alarm (effective BPS will become 0)
 	c.Assert(os.Remove(filenames[0]), IsNil)
 	c.Assert(os.Remove(filenames[1]), IsNil)
-	time.Sleep(period)
-
+	<-sync
 	// stops the watcher
 	s.cancel()
 	err, ok := <-errs
@@ -157,6 +167,7 @@ func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
 }
 
 func (s *DiskWatcherSuite) TestWatcherCritsNearLimit(c *C) {
+	sync := make(chan int, 1)
 	// when near to minutes, the tricks do not work well, simply we do
 	// not check the time computation nor the number sent.
 	s.olympus.EXPECT().PushDiskStatus(gomock.Any(),
@@ -165,15 +176,12 @@ func (s *DiskWatcherSuite) TestWatcherCritsNearLimit(c *C) {
 			Level:          olympuspb.AlarmLevel_EMERGENCY,
 			Status:         olympuspb.AlarmStatus_ON,
 			Description:    "critically low free disk space .*, will stop in ~ .*",
-		}).AnyTimes()
+		}).Do(func(x, y any) { sync <- 0 })
 
 	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
 	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, 3*time.Minute)
 	errs := Start(s.watcher)
-
-	//wait for the emergency to fire
-	time.Sleep(time.Duration(1.2 * float64(period)))
-
+	<-sync
 	s.cancel()
 	err, ok := <-errs
 	c.Check(err, IsNil)

@@ -19,6 +19,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+var artemisCommandName = "artemis"
+
 // An TrackingEnvironment contains all configuration and information
 // about a running tracking experiment. It can be SetUp() in order to
 // initialize any needed resources (like directories where data would
@@ -113,7 +115,7 @@ func generateLoadBalancing(c NodeConfiguration) *leto.LoadBalancing {
 }
 
 func fetchCameraResolution(stubPaths *[]string) (int, int, error) {
-	cmd := exec.Command("artemis", "--fetch-resolution")
+	cmd := exec.Command(artemisCommandName, "--fetch-resolution")
 	if stubPaths != nil && len(*stubPaths) > 0 {
 		cmd.Args = append(cmd.Args, "--stub-image-paths", strings.Join(*stubPaths, ","))
 	}
@@ -309,7 +311,7 @@ func (e *TrackingEnvironment) saveLocalConfig() error {
 }
 
 func (e *TrackingEnvironment) buildArtemisCommand() (*exec.Cmd, error) {
-	cmd := exec.Command("artemis", e.TrackingCommandArgs()...)
+	cmd := exec.Command(artemisCommandName, e.TrackingCommandArgs()...)
 	err := e.saveArtemisCommand(cmd)
 	if err != nil {
 		return nil, err

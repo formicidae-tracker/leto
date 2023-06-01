@@ -64,19 +64,22 @@ func (l *Leto) check() error {
 }
 
 func (l *Leto) checkArtemis() error {
-	cmd := exec.Command("artemis", "--version")
+	cmd := exec.Command(artemisCommandName, "--version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return err
+		return fmt.Errorf("could not get artemis version: %s %w ", string(output), err)
 	}
 	artemisVersion := strings.TrimPrefix(strings.TrimSpace(string(output)), "artemis ")
 	return checkArtemisVersion(artemisVersion, leto.ARTEMIS_MIN_VERSION)
 }
 
 func (l *Leto) checkFFMpeg() error {
-	cmd := exec.Command("ffmpeg", "-version")
+	cmd := exec.Command(ffmpegCommandName, "-version")
 	_, err := cmd.CombinedOutput()
-	return err
+	if err != nil {
+		return fmt.Errorf("could not found ffmpeg: %w", err)
+	}
+	return nil
 }
 
 func (l *Leto) checkFirmwareVariant() error {
@@ -182,7 +185,7 @@ func (l *Leto) Stop() error {
 	defer l.mx.Unlock()
 
 	if l.isStarted() == false {
-		return errors.New("already stoppped")
+		return errors.New("already stopped")
 	}
 
 	l.cancel()

@@ -45,7 +45,6 @@ func NewDiskWatcher(ctx context.Context, env *TrackingEnvironment, olympus Olymp
 func (w *diskWatcher) Run() error {
 	ticker := time.NewTicker(w.period)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-w.ctx.Done():

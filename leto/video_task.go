@@ -14,6 +14,8 @@ import (
 	"github.com/formicidae-tracker/leto"
 )
 
+var ffmpegCommandName = "ffmpeg"
+
 type FFMpegCommand struct {
 	log    *os.File
 	ecmd   *exec.Cmd
@@ -23,7 +25,7 @@ type FFMpegCommand struct {
 
 func NewFFMpegCommand(args []string, logFileName string) (*FFMpegCommand, error) {
 	cmd := &FFMpegCommand{
-		ecmd: exec.Command("ffmpeg", args...),
+		ecmd: exec.Command(ffmpegCommandName, args...),
 	}
 	var err error
 	// Close on exec will be set by go runtime, ensuring this file

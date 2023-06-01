@@ -8,6 +8,8 @@ import (
 	"github.com/blang/semver"
 )
 
+var coaxlinkFirmwareCommandName = "coaxlink-firmware"
+
 func getAndCheckFirmwareVariant(c NodeConfiguration) error {
 	variant, err := getFirmwareVariant()
 	if err != nil {
@@ -17,10 +19,10 @@ func getAndCheckFirmwareVariant(c NodeConfiguration) error {
 }
 
 func getFirmwareVariant() (string, error) {
-	cmd := exec.Command("coaxlink-firmware")
+	cmd := exec.Command(coaxlinkFirmwareCommandName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("Could not check slave firmware variant")
+		return "", fmt.Errorf("could not check firmware variant: %s", err)
 	}
 
 	return extractCoaxlinkFirmwareOutput(output)
