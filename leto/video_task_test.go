@@ -89,7 +89,7 @@ func (s *VideoTaskSuite) TestE2E(c *C) {
 	c.Assert(os.MkdirAll(dir, 0755), IsNil)
 
 	v, err := NewVideoManager(dir, 8.0, streamConfiguration)
-	v.(*videoTask).config.period = 40 * time.Millisecond
+	v.(*videoTask).config.period = 80 * time.Millisecond
 	c.Assert(err, IsNil)
 
 	in, out := io.Pipe()

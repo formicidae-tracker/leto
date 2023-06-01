@@ -45,6 +45,8 @@ func NewFFMpegCommand(args []string, logFileName string) (*FFMpegCommand, error)
 		return nil, err
 	}
 
+	cmd.ecmd.WaitDelay = 10 * time.Millisecond
+
 	return cmd, nil
 }
 
@@ -61,7 +63,12 @@ func (cmd *FFMpegCommand) Start() error {
 }
 
 func (cmd *FFMpegCommand) Stop() error {
-	return cmd.ecmd.Process.Signal(os.Interrupt)
+	cmd.ecmd.Process.Signal(os.Interrupt)
+	return nil
+}
+
+func (cmd *FFMpegCommand) Kill() error {
+	return cmd.ecmd.Process.Kill()
 }
 
 func (cmd *FFMpegCommand) Wait() error {
@@ -164,7 +171,8 @@ type videoTask struct {
 
 	config videoTaskConfig
 
-	encodeCmd, streamCmd, saveCmd *FFMpegCommand
+	encodeCmd, streamCmd, saveCmd    *FFMpegCommand
+	encodeDone, streamDone, saveDone <-chan struct{}
 
 	frameCorrespondance *os.File
 
@@ -178,7 +186,7 @@ func NewVideoManager(basedir string, fps float64, config leto.StreamConfiguratio
 	}
 	res := &videoTask{
 		config: conf,
-		logger: NewLogger("stream"),
+		logger: NewLogger("video"),
 	}
 	if err := res.Check(); err != nil {
 		return nil, err
@@ -274,19 +282,21 @@ func (s *videoTask) copyRoutine() (int64, error) {
 	return s.copyToSave()
 }
 
-func (s *videoTask) startCommand(cmd *FFMpegCommand, commandName string) error {
+func (s *videoTask) startCommand(cmd *FFMpegCommand, commandName string) (<-chan struct{}, error) {
 	if err := cmd.Start(); err != nil {
-		return err
+		return nil, err
 	}
-
+	done := make(chan struct{})
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		defer close(done)
+
 		if err := cmd.Wait(); err != nil {
 			s.logger.Printf("%s ffmpeg command failed: %s", commandName, err)
 		}
 	}()
-	return nil
+	return done, nil
 }
 
 func (s *videoTask) startTasks() error {
@@ -334,11 +344,13 @@ func (s *videoTask) startTasks() error {
 	}
 	s.logger.Printf("starting saving to %s", filenames.movie)
 
-	if err := s.startCommand(s.encodeCmd, "encode"); err != nil {
+	s.encodeDone, err = s.startCommand(s.encodeCmd, "encode")
+	if err != nil {
 		return err
 	}
 
-	if err := s.startCommand(s.saveCmd, "save"); err != nil {
+	s.saveDone, err = s.startCommand(s.saveCmd, "save")
+	if err != nil {
 		return err
 	}
 
@@ -346,7 +358,8 @@ func (s *videoTask) startTasks() error {
 		return nil
 	}
 
-	return s.startCommand(s.streamCmd, "stream")
+	s.streamDone, err = s.startCommand(s.streamCmd, "stream")
+	return err
 }
 
 func (s *videoTask) stopTasks() {
@@ -354,15 +367,42 @@ func (s *videoTask) stopTasks() {
 		return
 	}
 	s.logger.Printf("stopping video tasks")
-	s.encodeCmd.Stdin().Close()
-	//s.logger.Printf("encode Stop(): %s",s.encodeCmd.Stop())
+	s.encodeCmd.Stdin().Close() // it should nicely close all tasks
+}
+
+func (s *videoTask) waitOrKill(cmd *FFMpegCommand, done <-chan struct{}, name string) {
+	if cmd == nil || done == nil {
+		return
+	}
+	grace := 500 * time.Millisecond
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+		return
+	case <-timer.C:
+	}
+	s.logger.Printf("killing %s ffmpeg as it did not stop after %s", name, grace)
+	if err := cmd.Kill(); err != nil {
+		s.logger.Printf("could not kill %s ffmpeg: %s", name, err)
+	}
 }
 
 func (s *videoTask) waitTasks() {
-	s.wg.Wait()
+	s.waitOrKill(s.encodeCmd, s.encodeDone, "encode")
+	s.waitOrKill(s.saveCmd, s.saveDone, "save")
+	s.waitOrKill(s.streamCmd, s.streamDone, "stream")
+
 	s.encodeCmd = nil
 	s.saveCmd = nil
-	s.encodeCmd = nil
+	s.streamCmd = nil
+
+	s.encodeDone = nil
+	s.saveDone = nil
+	s.streamDone = nil
+
+	s.wg.Wait()
 	if s.frameCorrespondance != nil {
 		s.frameCorrespondance.Close()
 	}
@@ -432,7 +472,7 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 			s.logger.Printf("cannot copy frame: %v", err)
 			frameWriteError += 1
 			if frameWriteError >= maxFrameRetries {
-				return fmt.Errorf("stop after encode in error: %w", err)
+				return fmt.Errorf("stop after encode copy error: %w", err)
 			}
 			if err != os.ErrClosed {
 				s.stopTasks()
@@ -446,10 +486,9 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 			s.logger.Printf("creating new film segment after %s", s.config.period)
 
 			s.stopTasks()
-
 			s.waitTasks()
-			s.logger.Printf("written %d frames", currentFrame)
 
+			s.logger.Printf("written %d frames", currentFrame)
 		}
 	}
 

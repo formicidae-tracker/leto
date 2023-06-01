@@ -29,7 +29,7 @@ type Leto struct {
 	cancel context.CancelFunc
 
 	env        *TrackingEnvironment
-	runnerSync sync.WaitGroup
+	runnerCond *sync.Cond
 
 	lastExperimentLog *letopb.ExperimentLog
 
@@ -42,6 +42,7 @@ func NewLeto(config leto.Config) (*Leto, error) {
 		node:   GetNodeConfiguration(),
 		logger: NewLogger("leto"),
 	}
+	l.runnerCond = sync.NewCond(&l.mx)
 	if err := l.check(); err != nil {
 		return nil, err
 	}
@@ -158,12 +159,8 @@ func (l *Leto) start(user *leto.TrackingConfiguration) (err error) {
 		return err
 	}
 
-	l.runnerSync.Add(1)
 	go func() {
-		defer func() {
-			l.runnerSync.Done()
-		}()
-
+		l.logger.Printf("starting experiment %s", l.env.Config.ExperimentName)
 		log, err := runner.Run()
 		if err != nil {
 			l.logger.Printf("experiment failed: %s", err)
@@ -174,6 +171,7 @@ func (l *Leto) start(user *leto.TrackingConfiguration) (err error) {
 		l.lastExperimentLog = log
 		l.env = nil
 		l.removePersistentFile()
+		l.runnerCond.Broadcast()
 	}()
 
 	l.writePersistentFile()
@@ -187,15 +185,15 @@ func (l *Leto) Stop() error {
 	if l.isStarted() == false {
 		return errors.New("already stopped")
 	}
-
+	l.logger.Printf("stopping experiment %s", l.env.Config.ExperimentName)
 	l.cancel()
-	l.waitDone()
+
+	// to avoid a deadlock, we must unlo
+	for l.env != nil {
+		l.runnerCond.Wait()
+	}
 
 	return nil
-}
-
-func (l *Leto) waitDone() {
-	l.runnerSync.Wait()
 }
 
 func (l *Leto) SetMaster(hostname string) error {

@@ -56,11 +56,46 @@ func (s *LetoSuite) TestAlreadyStopped(c *C) {
 	c.Check(s.l.Stop(), ErrorMatches, "already stopped")
 }
 
-func (s *LetoSuite) TestE2ETestMode(c *C) {
+func (s *LetoSuite) TestTestMode(c *C) {
 	c.Check(s.l.LastExperimentLog(), IsNil)
-	c.Assert(s.l.Start(&leto.TrackingConfiguration{}), IsNil)
+	conf := &leto.TrackingConfiguration{
+		Camera: leto.CameraConfiguration{
+			FPS: newWithValue(100.0),
+		},
+	}
+
+	c.Assert(s.l.Start(conf), IsNil)
 	c.Assert(s.l.Start(&leto.TrackingConfiguration{}), ErrorMatches, "already started")
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	c.Check(s.l.Stop(), IsNil)
-	c.Check(s.l.LastExperimentLog(), Equals, nil)
+	log := s.l.LastExperimentLog()
+	c.Assert(log, Not(IsNil))
+	c.Check(log.HasError, Equals, false)
+
+	entries, err := os.ReadDir(filepath.Join(os.TempDir(), "fort-tests"))
+	c.Check(err, IsNil)
+	if c.Check(entries, HasLen, 0) == false {
+		for _, e := range entries {
+			c.Errorf("unexpected file %s", e.Name())
+		}
+	}
+}
+
+func (s *LetoSuite) TestE2E(c *C) {
+	conf := &leto.TrackingConfiguration{
+		ExperimentName: "test-e2e",
+		Camera: leto.CameraConfiguration{
+			FPS: newWithValue(100.0),
+		},
+	}
+
+	c.Check(s.l.LastExperimentLog(), IsNil)
+
+	c.Assert(s.l.Start(conf), IsNil)
+	time.Sleep(500 * time.Millisecond)
+	c.Check(s.l.Stop(), IsNil)
+	log := s.l.LastExperimentLog()
+	c.Assert(log, Not(IsNil))
+	c.Check(log.HasError, Equals, false)
+
 }

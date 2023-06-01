@@ -19,7 +19,8 @@ import (
 type masterRunner struct {
 	env *TrackingEnvironment
 
-	artemisCmd *exec.Cmd
+	artemisCmd  *exec.Cmd
+	artemisDone chan struct{}
 
 	artemisListener   ArtemisListener
 	hermesBroadcaster HermesBroadcaster
@@ -41,11 +42,12 @@ type masterRunner struct {
 func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	ctx, cancel := context.WithCancel(env.Context)
 	res := &masterRunner{
-		env:      env,
-		subtasks: make(map[string]<-chan error),
-		ctx:      ctx,
-		cancel:   cancel,
-		logger:   NewLogger("experiment-runner"),
+		env:         env,
+		subtasks:    make(map[string]<-chan error),
+		ctx:         ctx,
+		cancel:      cancel,
+		logger:      NewLogger("experiment-runner"),
+		artemisDone: make(chan struct{}),
 	}
 	if err := res.SetUp(); err != nil {
 		return nil, err
@@ -106,18 +108,39 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 	}()
 
 	r.startSubtasks()
-	go func() {
-		<-r.ctx.Done()
-		r.artemisCmd.Process.Signal(os.Interrupt)
+
+	defer func() {
+		r.stopAllSubtask()
+		r.waitAllSubtask()
 	}()
 
-	err = r.waitAnyCriticalSubtask()
+	go func() {
+		select {
+		case <-r.artemisDone:
+			return
+		case <-r.ctx.Done():
+		}
 
-	r.stopAllSubtask()
+		r.artemisCmd.Process.Signal(os.Interrupt)
+		grace := 500 * time.Millisecond
+		timer := time.NewTimer(grace)
+		defer timer.Stop()
+		select {
+		case <-r.artemisDone:
+		case <-timer.C:
+			r.logger.Printf("killing artemis as it did not terminated after %s", grace)
+			err := r.artemisCmd.Process.Kill()
+			// closing all pipes
+			r.artemisOut.Close()
+			r.videoIn.Close()
+			if err != nil {
+				r.logger.Printf("could not kill artemis: %s", err)
+			}
+		}
 
-	r.waitAllSubtask()
+	}()
 
-	return nil, err
+	return nil, r.waitAnyCriticalSubtask()
 }
 
 func (r *masterRunner) startSubtasks() {
@@ -137,6 +160,7 @@ func (r *masterRunner) startSubtasks() {
 
 	r.startSubtaskFunction(func() error {
 		defer func() {
+			close(r.artemisDone)
 			err := r.artemisOut.Close()
 			if err != nil {
 				r.logger.Printf("could not close pipe: %s", err)
@@ -184,16 +208,18 @@ func (r *masterRunner) waitAnyCriticalSubtask() error {
 		return fmt.Errorf("logic error: channel for task %s is closed", task)
 	}
 
-	err, ok := v.Interface().(error)
+	ierr := v.Interface()
+
+	if ierr == nil {
+		return nil
+	}
+
+	err, ok := ierr.(error)
 	if ok == false {
 		err = fmt.Errorf("logic error: task %s did not returned an error", task)
 	}
 
-	if err != nil {
-		return fmt.Errorf("critical task %s error: %w", task, err)
-	}
-
-	return nil
+	return fmt.Errorf("critical task %s error: %w", task, err)
 }
 
 func (r *masterRunner) stopAllSubtask() {

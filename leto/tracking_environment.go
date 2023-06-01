@@ -322,6 +322,7 @@ func (e *TrackingEnvironment) buildArtemisCommand() (*exec.Cmd, error) {
 	}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
+	cmd.WaitDelay = 100 * time.Millisecond
 	return cmd, nil
 }
 
@@ -331,8 +332,7 @@ func (e *TrackingEnvironment) saveArtemisCommand(cmd *exec.Cmd) error {
 		return err
 	}
 	defer f.Close()
-	values := append([]string{cmd.Path}, cmd.Args...)
-	_, err = fmt.Fprintln(f, strings.Join(values, " "))
+	_, err = fmt.Fprintln(f, strings.Join(cmd.Args, " "))
 	return err
 }
 
