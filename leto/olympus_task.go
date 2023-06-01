@@ -15,6 +15,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+//go:generate mockgen -source=olympus_task.go -aux_files github.com/formicidae-tracker/leto/leto=task.go -package main -destination=mock_olympus_task_test.go
+
 type OlympusTask interface {
 	Task
 	PushDiskStatus(*olympuspb.DiskStatus, *olympuspb.AlarmUpdate)
