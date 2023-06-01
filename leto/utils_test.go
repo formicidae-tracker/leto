@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
 	. "gopkg.in/check.v1"
 )
@@ -77,10 +78,25 @@ func (s *UtilsSuite) TestByteSize(c *C) {
 		{Value: 9.0 * math.Pow(2, 30), Expected: "9.0 GiB"},
 		{Value: 1.32 * math.Pow(2, 40), Expected: "1.3 TiB"},
 		{Value: 7.96 * math.Pow(2, 50), Expected: "8.0 PiB"},
-		{Value: 7.34 * math.Pow(2, 60), Expected: "7.3 ZiB"},
+		{Value: 7.34 * math.Pow(2, 60), Expected: "7.3 EiB"},
 	}
 
 	for _, d := range testdata {
 		c.Check(fmt.Sprintf("%s", ByteSize(d.Value)), Equals, d.Expected)
 	}
+}
+
+func (s *UtilsSuite) TestHumanDuration(c *C) {
+	testdata := []struct {
+		Value    time.Duration
+		Expected string
+	}{
+		{Value: 52 * time.Hour, Expected: "2d4h"},
+		{Value: 98 * time.Minute, Expected: "1h38m"},
+	}
+
+	for _, d := range testdata {
+		c.Check(fmt.Sprintf("%s", HumanDuration(d.Value)), Equals, d.Expected)
+	}
+
 }

@@ -32,10 +32,11 @@ func (r Result) running() int {
 }
 
 type ResultTableLine struct {
-	Node       string
 	Status     string
+	Node       string
 	Experiment string
 	Since      string
+	Space      string
 	Links      string
 }
 
@@ -82,11 +83,11 @@ func (c *ScanCommand) Execute(args []string) error {
 		if len(r.Status.Master) != 0 {
 			line.Links = "↦ " + strings.TrimPrefix(r.Status.Master, "leto.")
 		} else if len(r.Status.Slaves) != 0 {
-			sep := "↤ "
-			for _, s := range r.Status.Slaves {
-				line.Links += sep + strings.TrimPrefix(s, "leto.")
-				sep = ",↤ "
+			slaves := make([]string, len(r.Status.Slaves))
+			for i, s := range r.Status.Slaves {
+				slaves[i] = "↤  " + strings.TrimPrefix(s, "leto.")
 			}
+			line.Links = strings.Join(slaves, ",")
 		}
 		if r.Status.Experiment != nil {
 			line.Status = "Running"

@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/formicidae-tracker/leto"
+	olympuspb "github.com/formicidae-tracker/olympus/api"
 	"github.com/golang/mock/gomock"
 	. "gopkg.in/check.v1"
 )
@@ -20,8 +24,8 @@ type DiskWatcherSuite struct {
 	olympus *MockOlympusTask
 }
 
-var period = 5 * time.Millisecond
-var filesize int64 = 1024
+var period = 20 * time.Millisecond
+var filesize int64 = 4096
 
 var _ = Suite(&DiskWatcherSuite{})
 
@@ -40,12 +44,12 @@ func (s *DiskWatcherSuite) SetUpTest(c *C) {
 
 	s.env.FreeStartBytes, _, err = fsStat(s.Dir)
 	c.Assert(err, IsNil)
-	s.env.Start = time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.watcher = NewDiskWatcher(ctx, s.env, s.olympus).(*diskWatcher)
 	s.watcher.period = period
 	s.cancel = cancel
 
+	s.env.Start = time.Now()
 }
 
 func (s *DiskWatcherSuite) TearDownTest(c *C) {
@@ -63,7 +67,7 @@ func (s *DiskWatcherSuite) TestCanReadFs(c *C) {
 }
 
 func (s *DiskWatcherSuite) TestWatcherFailsWhenLimitExceed(c *C) {
-	s.env.Leto.DiskLimit = s.env.FreeStartBytes + 100*1024
+	s.env.Leto.DiskLimit = s.env.FreeStartBytes + 1000*1024
 	err := <-Start(s.watcher)
 	c.Check(err, ErrorMatches, "unsufficient disk space: available: .* minimum: .*")
 }
@@ -72,14 +76,104 @@ func computeDiskLimit(startFreeByte int64, targetETA time.Duration) int64 {
 	return startFreeByte - int64(float64(filesize)/period.Seconds()*targetETA.Seconds())
 }
 
+type AlarmUpdateMatches olympuspb.AlarmUpdate
+
+func (m *AlarmUpdateMatches) Matches(x interface{}) bool {
+	xx, ok := x.(*olympuspb.AlarmUpdate)
+	if ok == false || xx == nil {
+		return false
+	}
+
+	if xx.Identification != m.Identification {
+		return false
+	}
+
+	if xx.Level != m.Level {
+		return false
+	}
+
+	if xx.Time.AsTime().After(time.Now()) {
+		return false
+	}
+
+	rx := regexp.MustCompile(m.Description)
+	return rx.MatchString(xx.Description)
+}
+
+func (m *AlarmUpdateMatches) String() string {
+	return fmt.Sprintf("identification: \"%s\" level: %s status: %s description:\"%s\"",
+		m.Identification,
+		olympuspb.AlarmLevel_name[int32(m.Level)],
+		olympuspb.AlarmStatus_name[int32(m.Status)],
+		m.Description)
+}
+
 func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
-	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
+
+	gomock.InOrder(
+		s.olympus.EXPECT().PushDiskStatus(gomock.Any(),
+			&AlarmUpdateMatches{
+				Identification: "tracking.disk_status",
+				Level:          olympuspb.AlarmLevel_WARNING,
+				Status:         olympuspb.AlarmStatus_ON,
+				Description:    "low free disk space .*, will stop in ~ 6h0m",
+			}),
+		s.olympus.EXPECT().PushDiskStatus(gomock.Any(), gomock.Nil()), // do not report same alarm twice
+		s.olympus.EXPECT().PushDiskStatus(gomock.Any(), // reports when alarms stops
+			&AlarmUpdateMatches{
+				Identification: "tracking.disk_status",
+				Level:          olympuspb.AlarmLevel_WARNING,
+				Status:         olympuspb.AlarmStatus_OFF,
+				Description:    "",
+			}),
+	)
+
+	filenames := []string{
+		filepath.Join(s.Dir, c.TestName()+".1"),
+		filepath.Join(s.Dir, c.TestName()+".2"),
+	}
+	ioutil.WriteFile(filenames[0], make([]byte, filesize), 0644)
 	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, 6*time.Hour)
 
-	s.olympus.EXPECT().PushDiskStatus(gomock.Any(), gomock.Any())
-
 	errs := Start(s.watcher)
+
+	//wait for first report
 	time.Sleep(time.Duration(1.2 * float64(period)))
+
+	// rewrite a new file to keep same BPS, and produce the same alarm
+	ioutil.WriteFile(filenames[1], make([]byte, filesize), 0644)
+	time.Sleep(period)
+
+	// removes all files to clear the alarm (effective BPS will become 0)
+	c.Assert(os.Remove(filenames[0]), IsNil)
+	c.Assert(os.Remove(filenames[1]), IsNil)
+	time.Sleep(period)
+
+	// stops the watcher
+	s.cancel()
+	err, ok := <-errs
+	c.Check(err, IsNil)
+	c.Check(ok, Equals, true)
+}
+
+func (s *DiskWatcherSuite) TestWatcherCritsNearLimit(c *C) {
+	// when near to minutes, the tricks do not work well, simply we do
+	// not check the time computation nor the number sent.
+	s.olympus.EXPECT().PushDiskStatus(gomock.Any(),
+		&AlarmUpdateMatches{
+			Identification: "tracking.disk_status",
+			Level:          olympuspb.AlarmLevel_EMERGENCY,
+			Status:         olympuspb.AlarmStatus_ON,
+			Description:    "critically low free disk space .*, will stop in ~ .*",
+		}).AnyTimes()
+
+	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
+	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, 3*time.Minute)
+	errs := Start(s.watcher)
+
+	//wait for the emergency to fire
+	time.Sleep(time.Duration(1.2 * float64(period)))
+
 	s.cancel()
 	err, ok := <-errs
 	c.Check(err, IsNil)

@@ -106,9 +106,11 @@ func (w *diskWatcher) computeAlarmUpdate(status *olympuspb.DiskStatus) *olympusp
 
 	if eta < 12*time.Hour {
 		update.Status = olympuspb.AlarmStatus_ON
-		update.Description = fmt.Sprintf("low disk free disk space %s, will stop in ~ %s",
-			ByteSize(status.FreeBytes), eta.Round(time.Hour))
-	} else if eta < 1*time.Hour {
+		update.Description = fmt.Sprintf("low free disk space %s, will stop in ~ %s",
+			ByteSize(status.FreeBytes), HumanDuration(eta.Round(time.Hour)))
+	}
+
+	if eta < 1*time.Hour {
 		update.Status = olympuspb.AlarmStatus_ON
 		update.Level = olympuspb.AlarmLevel_EMERGENCY
 		update.Description = fmt.Sprintf("critically low free disk space %s, will stop in ~ %s",
