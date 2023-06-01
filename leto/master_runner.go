@@ -19,8 +19,7 @@ import (
 type masterRunner struct {
 	env *TrackingEnvironment
 
-	artemisCmd  *exec.Cmd
-	artemisDone chan struct{}
+	artemisCmd *exec.Cmd
 
 	artemisListener   ArtemisListener
 	hermesBroadcaster HermesBroadcaster
@@ -29,8 +28,8 @@ type masterRunner struct {
 	dispatcher        FrameDispatcher
 	olympus           OlympusTask
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	trackerCtx, otherCtx       context.Context
+	cancelTracker, cancelOther context.CancelFunc
 
 	artemisOut *io.PipeWriter
 	videoIn    *io.PipeReader
@@ -40,14 +39,16 @@ type masterRunner struct {
 }
 
 func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
-	ctx, cancel := context.WithCancel(env.Context)
+	trackerCtx, cancelTracker := context.WithCancel(env.Context)
+	otherCtx, cancelOther := context.WithCancel(context.Background())
 	res := &masterRunner{
-		env:         env,
-		subtasks:    make(map[string]<-chan error),
-		ctx:         ctx,
-		cancel:      cancel,
-		logger:      NewLogger("experiment-runner"),
-		artemisDone: make(chan struct{}),
+		env:           env,
+		subtasks:      make(map[string]<-chan error),
+		trackerCtx:    trackerCtx,
+		otherCtx:      otherCtx,
+		cancelTracker: cancelTracker,
+		cancelOther:   cancelOther,
+		logger:        NewLogger("runner"),
 	}
 	if err := res.SetUp(); err != nil {
 		return nil, err
@@ -58,12 +59,12 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 
 func (r *masterRunner) SetUp() error {
 	var err error
-	r.artemisListener, err = NewArtemisListener(r.ctx, r.env.Leto.ArtemisIncomingPort)
+	r.artemisListener, err = NewArtemisListener(r.otherCtx, r.env.Leto.ArtemisIncomingPort)
 	if err != nil {
 		return err
 	}
 
-	r.hermesBroadcaster, err = NewHermesBroadcaster(r.ctx,
+	r.hermesBroadcaster, err = NewHermesBroadcaster(r.otherCtx,
 		r.env.Leto.HermesBroadcastPort,
 		time.Duration(3.0*float64(time.Second)/(*r.env.Config.Camera.FPS)),
 	)
@@ -90,7 +91,7 @@ func (r *masterRunner) SetUp() error {
 	if err != nil {
 		return err
 	}
-	r.olympus, err = NewOlympusTask(r.ctx, r.env)
+	r.olympus, err = NewOlympusTask(r.otherCtx, r.env)
 	if err != nil {
 		r.logger.Printf("will not register to olympus: %s", err)
 	}
@@ -115,24 +116,20 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 	}()
 
 	go func() {
-		select {
-		case <-r.artemisDone:
-			return
-		case <-r.ctx.Done():
-		}
+		//wait for either the TrackingEnv or own to be Done
+		<-r.trackerCtx.Done()
 
+		// if already terminated, will do nothing
 		r.artemisCmd.Process.Signal(os.Interrupt)
 		grace := 500 * time.Millisecond
 		timer := time.NewTimer(grace)
 		defer timer.Stop()
 		select {
-		case <-r.artemisDone:
+		case <-r.otherCtx.Done():
 		case <-timer.C:
 			r.logger.Printf("killing artemis as it did not terminated after %s", grace)
 			err := r.artemisCmd.Process.Kill()
 			// closing all pipes
-			r.artemisOut.Close()
-			r.videoIn.Close()
 			if err != nil {
 				r.logger.Printf("could not kill artemis: %s", err)
 			}
@@ -144,7 +141,7 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 }
 
 func (r *masterRunner) startSubtasks() {
-	r.startSubtask(NewDiskWatcher(r.ctx, r.env, r.olympus), "disk-watcher")
+	r.startSubtask(NewDiskWatcher(r.otherCtx, r.env, r.olympus), "disk-watcher")
 	r.startSubtask(r.artemisListener, "artemis-in")
 
 	r.startSubtaskFunction(r.mergeFrames(), "frame-merger")
@@ -160,7 +157,8 @@ func (r *masterRunner) startSubtasks() {
 
 	r.startSubtaskFunction(func() error {
 		defer func() {
-			close(r.artemisDone)
+			r.logger.Printf("local-tracker is done")
+			r.cancelOther()
 			err := r.artemisOut.Close()
 			if err != nil {
 				r.logger.Printf("could not close pipe: %s", err)
@@ -224,7 +222,7 @@ func (r *masterRunner) waitAnyCriticalSubtask() error {
 
 func (r *masterRunner) stopAllSubtask() {
 	r.stopSlaves()
-	r.cancel()
+	r.cancelTracker()
 }
 
 func (r *masterRunner) waitAllSubtask() {
@@ -234,7 +232,15 @@ func (r *masterRunner) waitAllSubtask() {
 	for n, t := range r.subtasks {
 		go func(name string, errs <-chan error) {
 			defer wg.Done()
-			err := <-errs
+			var err error
+			delay := 500 * time.Millisecond
+			select {
+			case err = <-errs:
+			case <-time.After(delay):
+				r.logger.Printf("%s task still running after %s", name, delay)
+				err = <-errs
+			}
+
 			if err != nil {
 				r.logger.Printf("task %s terminated with error: %s", name, err)
 			}
