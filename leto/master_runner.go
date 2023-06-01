@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"os/exec"
 	"reflect"
 	"sync"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/letopb"
+	"golang.org/x/exp/constraints"
 )
 
 type masterRunner struct {
@@ -86,7 +86,7 @@ func (r *masterRunner) SetUp() error {
 
 	r.videoIn, r.artemisOut = io.Pipe()
 
-	r.artemisCmd, err = r.env.SetUp()
+	r.artemisCmd, err = r.env.SetUp(r.trackerCtx)
 	r.artemisCmd.Stdout = r.artemisOut
 	if err != nil {
 		return err
@@ -120,19 +120,7 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 		<-r.trackerCtx.Done()
 
 		// if already terminated, will do nothing
-		r.artemisCmd.Process.Signal(os.Interrupt)
-		grace := 500 * time.Millisecond
-		timer := time.NewTimer(grace)
-		defer timer.Stop()
-		select {
-		case <-r.otherCtx.Done():
-		case <-timer.C:
-			r.logger.Printf("killing artemis as it did not terminated after %s", grace)
-			err := r.artemisCmd.Process.Kill()
-			// closing all pipes
-			if err != nil {
-				r.logger.Printf("could not kill artemis: %s", err)
-			}
+		for !WaitDoneOrKill(r.artemisCmd, r.otherCtx.Done(), 500*time.Millisecond, r.logger, "artemis") {
 		}
 
 	}()
@@ -183,12 +171,15 @@ func (r *masterRunner) startSubtaskFunction(f func() error, name string) {
 
 func (r *masterRunner) mergeFrames() func() error {
 	return func() error {
-		return MergeFrameReadout(r.env.Balancing, r.artemisListener.Outbound(), r.dispatcher.Incoming())
+		return MergeFrameReadout(r.otherCtx, r.env.Balancing, r.artemisListener.Outbound(), r.dispatcher.Incoming())
 	}
 }
 
 func (r *masterRunner) waitAnyCriticalSubtask() error {
-	criticalTasks := []string{"artemis-in", "frame-merger", "frame-dispatcher", "writer", "video", "local-tracker", "disk-watcher"}
+	criticalTasks := []string{
+		"local-tracker", "artemis-in", "frame-merger",
+		"frame-dispatcher", "writer", "video", "disk-watcher",
+	}
 
 	cases := make([]reflect.SelectCase, len(criticalTasks))
 	for i, name := range criticalTasks {
@@ -217,12 +208,23 @@ func (r *masterRunner) waitAnyCriticalSubtask() error {
 		err = fmt.Errorf("logic error: task %s did not returned an error", task)
 	}
 
+	if chosen == 0 && err == context.Canceled {
+		return nil
+	}
+
 	return fmt.Errorf("critical task %s error: %w", task, err)
 }
 
 func (r *masterRunner) stopAllSubtask() {
 	r.stopSlaves()
 	r.cancelTracker()
+}
+
+func Min[T constraints.Ordered](a, b T) T {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (r *masterRunner) waitAllSubtask() {
@@ -234,11 +236,17 @@ func (r *masterRunner) waitAllSubtask() {
 			defer wg.Done()
 			var err error
 			delay := 500 * time.Millisecond
-			select {
-			case err = <-errs:
-			case <-time.After(delay):
-				r.logger.Printf("%s task still running after %s", name, delay)
-				err = <-errs
+			total := time.Duration(0)
+			stop := false
+			for stop == false {
+				select {
+				case err = <-errs:
+					stop = true
+				case <-time.After(delay):
+					total += delay
+					r.logger.Printf("%s task still running after %s", name, total)
+					delay = Min(2*delay, 10*time.Second)
+				}
 			}
 
 			if err != nil {

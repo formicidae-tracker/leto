@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
@@ -126,7 +127,7 @@ func (r ReadoutBuffer) Less(i, j int) bool {
 	return r[i].FrameID < r[j].FrameID
 }
 
-func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout, outbound chan<- *hermes.FrameReadout) error {
+func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout, outbound chan<- *hermes.FrameReadout) error {
 	defer close(outbound)
 
 	if err := wb.Check(); err != nil {
@@ -151,6 +152,8 @@ func MergeFrameReadout(wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout,
 		}
 		var now time.Time
 		select {
+		case <-ctx.Done():
+			return nil
 		case frame, ok := <-inbound:
 			if ok == false {
 				return nil

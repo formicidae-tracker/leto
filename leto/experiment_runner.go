@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 	"os/exec"
 	"time"
 
@@ -32,11 +31,28 @@ func newSlaveRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		logger: NewLogger("experiment-runner"),
 	}
 	var err error
-	res.artemisCmd, err = env.SetUp()
+	res.artemisCmd, err = env.SetUp(env.Context)
 	if err != nil {
 		return nil, err
 	}
 	return res, nil
+}
+
+func WaitDoneOrKill(cmd *exec.Cmd, done <-chan struct{}, grace time.Duration, logger *log.Logger, name string) bool {
+
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+	}
+	logger.Printf("killing %s as it did not terminate after %s", name, grace)
+	if err := cmd.Process.Kill(); err != nil {
+		logger.Printf("could not kill %s: %s", name, err)
+	}
+	return false
+
 }
 
 func (r *slaveRunner) Run() (log *letopb.ExperimentLog, err error) {
@@ -49,33 +65,16 @@ func (r *slaveRunner) Run() (log *letopb.ExperimentLog, err error) {
 	}()
 	done := make(chan struct{})
 	defer close(done)
-
 	go func() {
 		select {
 		case <-done:
 			return
 		case <-r.env.Context.Done():
 		}
-
-		r.artemisCmd.Process.Signal(os.Interrupt)
-
-		grace := 500 * time.Millisecond
-		timer := time.NewTimer(grace)
-		defer timer.Stop()
-
-		select {
-		case <-done:
-			return
-		case <-timer.C:
-		}
-		r.logger.Printf("killing artemis as it did not terminate after %s", grace)
-		if err := r.artemisCmd.Process.Kill(); err != nil {
-			r.logger.Printf("could not kill artemis: %s", err)
-		}
-
+		WaitDoneOrKill(r.artemisCmd, done, 500*time.Millisecond, r.logger, "artemis")
 	}()
-	r.logger.Printf("started")
 
+	r.logger.Printf("started")
 	defer r.logger.Printf("done")
 	return nil, r.artemisCmd.Run()
 }

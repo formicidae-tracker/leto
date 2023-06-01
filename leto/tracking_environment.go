@@ -267,7 +267,7 @@ func (e *TrackingEnvironment) TrackingCommandArgs() []string {
 	return args
 }
 
-func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
+func (e *TrackingEnvironment) SetUp(commandCtx context.Context) (*exec.Cmd, error) {
 	defer func() {
 		e.Start = time.Now()
 	}()
@@ -292,7 +292,7 @@ func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
 			ByteSize(e.Leto.DiskLimit))
 	}
 
-	return e.buildArtemisCommand()
+	return e.buildArtemisCommand(commandCtx)
 }
 
 func (e *TrackingEnvironment) makeAllDestinationDirs() error {
@@ -310,8 +310,8 @@ func (e *TrackingEnvironment) saveLocalConfig() error {
 	return e.Config.WriteConfiguration(e.Path("leto-final-config.yaml"))
 }
 
-func (e *TrackingEnvironment) buildArtemisCommand() (*exec.Cmd, error) {
-	cmd := exec.Command(artemisCommandName, e.TrackingCommandArgs()...)
+func (e *TrackingEnvironment) buildArtemisCommand(ctx context.Context) (*exec.Cmd, error) {
+	cmd := exec.CommandContext(ctx, artemisCommandName, e.TrackingCommandArgs()...)
 	err := e.saveArtemisCommand(cmd)
 	if err != nil {
 		return nil, err
@@ -322,6 +322,12 @@ func (e *TrackingEnvironment) buildArtemisCommand() (*exec.Cmd, error) {
 	}
 	cmd.Stdin = nil
 	cmd.Stdout = nil
+
+	cmd.Cancel = func() error {
+		cmd.Process.Signal(os.Interrupt)
+		return nil
+	}
+
 	cmd.WaitDelay = 100 * time.Millisecond
 	return cmd, nil
 }

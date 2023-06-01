@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -90,7 +91,7 @@ func (s *FrameReadoutMergerSuite) TestEnd2End(c *C) {
 	}
 
 	go func() {
-		err := MergeFrameReadout(wb, inbound, outbound)
+		err := MergeFrameReadout(context.TODO(), wb, inbound, outbound)
 		c.Check(err, IsNil)
 		if err != nil {
 			for range inbound {
