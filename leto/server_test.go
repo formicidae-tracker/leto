@@ -20,12 +20,14 @@ func (s *ServerSuite) SetUpTest(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 	var err error
-	s.server, err = NewServer(ctx, 12345, "[leto-tests]: ", 20*time.Millisecond)
+	s.server, err = NewServer(ctx, 12345, "leto-tests", 20*time.Millisecond)
 	c.Assert(err, IsNil)
 	s.err = Start(s.server)
+
 }
 
 func (s *ServerSuite) TearDownTest(c *C) {
+
 	s.cancel()
 	err, ok := <-s.err
 	if ok == false {
@@ -81,60 +83,3 @@ func (s *ServerSuite) TestClosesAllConnectionAfterGrace(c *C) {
 	err = <-s.err
 	c.Check(err, IsNil)
 }
-
-// func (s *ServerSuite) TestManager(c *C) {
-// 	readouts := make(chan *hermes.FrameReadout)
-// 	closed := make(chan struct{})
-// 	quit := make(chan struct{})
-
-// 	m := NewRemoteManager()
-
-// 	go m.Listen(":12345",
-// 		func(conn net.Conn) {
-// 			errors := make(chan error)
-// 			go func() {
-// 				for e := range errors {
-// 					c.Assert(e, IsNil)
-// 				}
-// 			}()
-// 			FrameReadoutReadAll(conn, readouts, errors)
-// 		},
-// 		func() {
-// 			close(readouts)
-// 		})
-// 	go func() {
-// 		conn, err := net.Dial("tcp", "localhost:12345")
-// 		c.Assert(err, IsNil)
-// 		time.Sleep(10 * time.Millisecond)
-// 		conn.Close()
-// 		close(closed)
-// 	}()
-// 	<-closed
-// 	wg := sync.WaitGroup{}
-// 	wg.Add(2)
-// 	for i := 0; i < 2; i++ {
-// 		go func() {
-// 			conn, err := net.Dial("tcp", "localhost:12345")
-// 			c.Assert(err, IsNil)
-// 			<-quit
-// 			conn.Close()
-// 			wg.Done()
-// 		}()
-// 	}
-
-// 	time.Sleep(70 * time.Millisecond)
-// 	m.mx.Lock()
-// 	c.Check(len(m.connections), Equals, 3)
-// 	m.mx.Unlock()
-// 	close(quit)
-// 	wg.Wait()
-// 	c.Check(m.Close(), IsNil)
-// 	m.mx.Lock()
-// 	for _, conn := range m.connections {
-// 		c.Check(conn, IsNil)
-// 	}
-// 	m.mx.Unlock()
-// 	_, ok := <-readouts
-// 	c.Check(ok, Equals, false)
-
-// }

@@ -18,7 +18,8 @@ import (
 type masterRunner struct {
 	env *TrackingEnvironment
 
-	artemisCmd *exec.Cmd
+	artemisCmd     *exec.Cmd
+	artemisStarted chan struct{}
 
 	artemisListener   ArtemisListener
 	hermesBroadcaster HermesBroadcaster
@@ -47,6 +48,7 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		cancelLocalTracker: cancelTracker,
 		cancelOthers:       cancelOther,
 		logger:             NewLogger("runner"),
+		artemisStarted:     make(chan struct{}),
 	}
 	if err := res.SetUp(); err != nil {
 		return nil, err
@@ -110,8 +112,9 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 	}()
 
 	r.startSubtasks()
-
+	// to avoid start race condition in
 	go func() {
+		<-r.artemisStarted
 		//wait for either the env.Context or own to be Done
 		<-r.trackerCtx.Done()
 		// if another critical task or env.Context we need to signal
@@ -162,7 +165,17 @@ func (r *masterRunner) startSubtasks() {
 		r.startSubtask(r.olympus, "olympus-registration")
 	}
 
-	r.startSubtask(r.artemisCmd, "local-tracker")
+	r.startSubtaskFunction(func() error {
+		// in order to avoid a race condition with the interruption
+		// signal, we have to process in two step and signal that the
+		// Process is started.
+		if err := r.artemisCmd.Start(); err != nil {
+			close(r.artemisStarted)
+			return err
+		}
+		close(r.artemisStarted)
+		return r.artemisCmd.Wait()
+	}, "local-tracker")
 }
 
 func (r *masterRunner) startSubtask(t Task, name string) {
