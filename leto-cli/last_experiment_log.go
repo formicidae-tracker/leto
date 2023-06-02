@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/letopb"
 	"gopkg.in/yaml.v2"
@@ -26,10 +27,17 @@ func (c *LastExperimentLogCommand) printSummary(name string, log *letopb.Experim
 		status = "\031[36m⚠\033[m"
 	}
 
+	start := log.Start.AsTime()
+	end := log.End.AsTime()
+	ellapsed := end.Sub(start)
+
+	timeFmt := "Monday _2 Jan 15:04:05 2006"
+
 	fmt.Printf("Experiment Name       : %s\n", name)
 	fmt.Printf("Experiment Output Dir : %s\n", log.ExperimentDir)
-	fmt.Printf("Experiment Start Date : %s\n", log.Start)
-	fmt.Printf("Experiment End Date   : %s\n", log.End)
+	fmt.Printf("Experiment Start Date : %s\n", start.Local().Format(timeFmt))
+	fmt.Printf("Experiment End Date   : %s\n", end.Local().Format(timeFmt))
+	fmt.Printf("Experiment Duration   : %s\n", humanize.Duration(ellapsed))
 	fmt.Printf("Experiment Status     : %s\n", status)
 	if log.HasError == true {
 		fmt.Printf("Experiment Error      : %s\n", log.Error)

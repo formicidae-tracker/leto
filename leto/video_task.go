@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto"
 )
 
@@ -336,7 +337,7 @@ func (s *videoTask) startTasks() error {
 		if err != nil {
 			s.logger.Printf("could not tranfer data between tasks: %s", err)
 		}
-		s.logger.Printf("written %s", ByteSize(n))
+		s.logger.Printf("written %s", humanize.ByteSize(n))
 	}()
 
 	if len(s.config.destAddress) > 0 {

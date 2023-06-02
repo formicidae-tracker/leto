@@ -121,32 +121,48 @@ func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
 	sync := make(chan int, 3)
 
 	gomock.InOrder(
-		s.olympus.EXPECT().PushDiskStatus(gomock.Any(),
-			&AlarmUpdateMatches{
-				Identification: "tracking.disk_status",
-				Level:          olympuspb.AlarmLevel_WARNING,
-				Status:         olympuspb.AlarmStatus_ON,
-				Description:    "low free disk space .*, will stop in ~ 6h0m",
-			}).Do(func(x, y any) { sync <- 0 }),
-		s.olympus.EXPECT().PushDiskStatus(gomock.Any(),
-			gomock.Nil()).Do(func(x, y any) { sync <- 1 }), // do not report same alarm twice
-		s.olympus.EXPECT().PushDiskStatus(gomock.Any(), // reports when alarms stops
-			&AlarmUpdateMatches{
-				Identification: "tracking.disk_status",
-				Level:          olympuspb.AlarmLevel_WARNING,
-				Status:         olympuspb.AlarmStatus_OFF,
-				Description:    "",
-			}).Do(func(x, y any) { sync <- 2 }),
+		s.olympus.EXPECT().
+			PushDiskStatus(gomock.Any(), gomock.Any()).
+			Do(func(x, y any) {
+				sync <- 0
+				expected := &AlarmUpdateMatches{
+					Identification: "tracking.disk_status",
+					Level:          olympuspb.AlarmLevel_WARNING,
+					Status:         olympuspb.AlarmStatus_ON,
+					Description:    "low free disk space .*, will stop in ~ 11h",
+				}
+				c.Logf("%s", y.(*olympuspb.AlarmUpdate).Description)
+				c.Check(expected.Matches(y), Equals, true)
+			}),
+		s.olympus.EXPECT().
+			PushDiskStatus(gomock.Any(), gomock.Any()).
+			Do(func(x, y any) {
+				sync <- 1
+				c.Check(y, IsNil)
+			}), // do not report same alarm twice
+		s.olympus.EXPECT().
+			PushDiskStatus(gomock.Any(), gomock.Any()). // reports when alarms stops
+			Do(func(x, y any) {
+				sync <- 2
+				expected := &AlarmUpdateMatches{
+					Identification: "tracking.disk_status",
+					Level:          olympuspb.AlarmLevel_WARNING,
+					Status:         olympuspb.AlarmStatus_OFF,
+					Description:    "",
+				}
+				c.Check(expected.Matches(y), Equals, true)
+			}),
 	)
 
 	filenames := []string{
 		filepath.Join(s.Dir, c.TestName()+".1"),
 		filepath.Join(s.Dir, c.TestName()+".2"),
 	}
-	ioutil.WriteFile(filenames[0], make([]byte, filesize), 0644)
+	s.env.Start = time.Now()
+	s.env.FreeStartBytes, _, _ = fsStat(s.Dir)
 	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, 6*time.Hour)
-
 	errs := Start(s.watcher)
+	ioutil.WriteFile(filenames[0], make([]byte, filesize), 0644)
 
 	//wait for first report
 	<-sync
@@ -170,13 +186,18 @@ func (s *DiskWatcherSuite) TestWatcherCritsNearLimit(c *C) {
 	sync := make(chan int, 1)
 	// when near to minutes, the tricks do not work well, simply we do
 	// not check the time computation nor the number sent.
-	s.olympus.EXPECT().PushDiskStatus(gomock.Any(),
-		&AlarmUpdateMatches{
-			Identification: "tracking.disk_status",
-			Level:          olympuspb.AlarmLevel_EMERGENCY,
-			Status:         olympuspb.AlarmStatus_ON,
-			Description:    "critically low free disk space .*, will stop in ~ .*",
-		}).Do(func(x, y any) { sync <- 0 })
+	s.olympus.EXPECT().
+		PushDiskStatus(gomock.Any(), gomock.Any()).
+		Do(func(x, y any) {
+			sync <- 0
+			expected := &AlarmUpdateMatches{
+				Identification: "tracking.disk_status",
+				Level:          olympuspb.AlarmLevel_EMERGENCY,
+				Status:         olympuspb.AlarmStatus_ON,
+				Description:    "critically low free disk space .*, will stop in ~ .*",
+			}
+			c.Check(expected.Matches(y), Equals, true)
+		})
 
 	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
 	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, 3*time.Minute)

@@ -1,11 +1,8 @@
 package main
 
 import (
-	"fmt"
-	"math"
 	"os"
 	"path/filepath"
-	"time"
 
 	. "gopkg.in/check.v1"
 )
@@ -64,39 +61,4 @@ func (s *UtilsSuite) TestDoNotFailIfParentDoNotExist(c *C) {
 	c.Check(err, IsNil)
 	c.Check(i, Equals, 0)
 	c.Check(fname, Equals, filepath.Join(s.tmpDir, "do-not-exists", "out.0000.txt"))
-}
-
-func (s *UtilsSuite) TestByteSize(c *C) {
-	testdata := []struct {
-		Value    float64
-		Expected string
-	}{
-		{Value: 0, Expected: "0.0 B"},
-		{Value: 1023, Expected: "1023.0 B"},
-		{Value: -10.4546 * math.Pow(2, 10), Expected: "-10.5 kiB"},
-		{Value: 3.41 * math.Pow(2, 20), Expected: "3.4 MiB"},
-		{Value: 9.0 * math.Pow(2, 30), Expected: "9.0 GiB"},
-		{Value: 1.32 * math.Pow(2, 40), Expected: "1.3 TiB"},
-		{Value: 7.96 * math.Pow(2, 50), Expected: "8.0 PiB"},
-		{Value: 7.34 * math.Pow(2, 60), Expected: "7.3 EiB"},
-	}
-
-	for _, d := range testdata {
-		c.Check(fmt.Sprintf("%s", ByteSize(d.Value)), Equals, d.Expected)
-	}
-}
-
-func (s *UtilsSuite) TestHumanDuration(c *C) {
-	testdata := []struct {
-		Value    time.Duration
-		Expected string
-	}{
-		{Value: 52 * time.Hour, Expected: "2d4h"},
-		{Value: 98 * time.Minute, Expected: "1h38m"},
-	}
-
-	for _, d := range testdata {
-		c.Check(fmt.Sprintf("%s", HumanDuration(d.Value)), Equals, d.Expected)
-	}
-
 }

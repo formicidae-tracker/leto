@@ -2,6 +2,8 @@ cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMT
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/adrg/xdg v0.2.1 h1:VSVdnH7cQ7V+B33qSJHTCRlNgra1607Q8PzEmnvb2Ic=
 github.com/adrg/xdg v0.2.1/go.mod h1:ZuOshBmzV4Ta+s23hdfFZnBsdzmoR3US0d7ErpqSbTQ=
+github.com/atuleu/go-humanize v0.0.0-20230602151331-d9d9193f4a5d h1:KGdu0YzjIvUfuhD3fmVRY9OIYio91P5MpJbUS+AxKFI=
+github.com/atuleu/go-humanize v0.0.0-20230602151331-d9d9193f4a5d/go.mod h1:uYIaAaMkME5uGCZ6lfmMgakob0x0VAh/yoZ7lUuR2s0=
 github.com/atuleu/go-lttb v0.0.0-20220928123602-2585f6369698 h1:j5uPq/Ux+epk57OnYcRTZopl8fALgogi4QKxdMGpUBs=
 github.com/atuleu/go-lttb v0.0.0-20220928123602-2585f6369698/go.mod h1:KBPzsycKi2NVN2wRyQdFfmMd1VUClpT5ddUPeBUoUlM=
 github.com/atuleu/go-tablifier v0.1.0 h1:zHrk6+0uhbKJe1mYiMJqgA3e9tkPcJziG59KxgNtNXc=

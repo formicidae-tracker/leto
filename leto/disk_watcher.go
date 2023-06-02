@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/atuleu/go-humanize"
 	olympuspb "github.com/formicidae-tracker/olympus/api"
 	"golang.org/x/sys/unix"
 )
@@ -70,7 +71,7 @@ func (w *diskWatcher) pollDisk(now time.Time) error {
 
 	if status.FreeBytes < w.env.Leto.DiskLimit {
 		return fmt.Errorf("unsufficient disk space: available: %s minimum: %s",
-			ByteSize(status.FreeBytes), ByteSize(w.env.Leto.DiskLimit))
+			humanize.ByteSize(status.FreeBytes), humanize.ByteSize(w.env.Leto.DiskLimit))
 	}
 
 	if w.olympus == nil {
@@ -106,14 +107,14 @@ func (w *diskWatcher) computeAlarmUpdate(status *olympuspb.DiskStatus) *olympusp
 	if eta < 12*time.Hour {
 		update.Status = olympuspb.AlarmStatus_ON
 		update.Description = fmt.Sprintf("low free disk space %s, will stop in ~ %s",
-			ByteSize(status.FreeBytes), HumanDuration(eta.Round(time.Hour)))
+			humanize.ByteSize(status.FreeBytes), humanize.Duration(eta))
 	}
 
 	if eta < 1*time.Hour {
 		update.Status = olympuspb.AlarmStatus_ON
 		update.Level = olympuspb.AlarmLevel_EMERGENCY
 		update.Description = fmt.Sprintf("critically low free disk space %s, will stop in ~ %s",
-			ByteSize(status.FreeBytes), eta.Round(time.Minute))
+			humanize.ByteSize(status.FreeBytes), humanize.Duration(time.Minute))
 	}
 
 	return update

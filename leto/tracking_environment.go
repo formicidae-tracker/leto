@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/letopb"
 	"github.com/google/uuid"
@@ -288,8 +289,8 @@ func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
 
 	if e.FreeStartBytes < e.Leto.DiskLimit {
 		return nil, fmt.Errorf("unsufficient disk space: available: %s minimum: %s",
-			ByteSize(e.FreeStartBytes),
-			ByteSize(e.Leto.DiskLimit))
+			humanize.ByteSize(e.FreeStartBytes),
+			humanize.ByteSize(e.Leto.DiskLimit))
 	}
 
 	return e.buildArtemisCommand()
