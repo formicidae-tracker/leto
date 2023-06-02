@@ -129,7 +129,7 @@ func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
 					Identification: "tracking.disk_status",
 					Level:          olympuspb.AlarmLevel_WARNING,
 					Status:         olympuspb.AlarmStatus_ON,
-					Description:    "low free disk space .*, will stop in ~ 11h",
+					Description:    "low free disk space .*, will stop in ~ 6h",
 				}
 				c.Logf("%s", y.(*olympuspb.AlarmUpdate).Description)
 				c.Check(expected.Matches(y), Equals, true)

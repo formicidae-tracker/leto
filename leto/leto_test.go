@@ -204,7 +204,7 @@ func (s *LetoSuite) TestArtemisFailure(c *C) {
 	}
 
 	c.Assert(s.l.Start(conf), IsNil)
-	time.Sleep(3 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 	log := s.l.LastExperimentLog()
 	c.Assert(log, Not(IsNil))
 	c.Check(log.HasError, Equals, true)
