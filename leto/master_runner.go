@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
+	"os"
 	"os/exec"
 	"reflect"
 	"sync"
@@ -31,8 +31,7 @@ type masterRunner struct {
 	trackerCtx, otherCtx       context.Context
 	cancelTracker, cancelOther context.CancelFunc
 
-	artemisOut *io.PipeWriter
-	videoIn    *io.PipeReader
+	artemisOut, videoIn *os.File
 
 	subtasks map[string]<-chan error
 	logger   *log.Logger
@@ -84,9 +83,12 @@ func (r *masterRunner) SetUp() error {
 		return err
 	}
 
-	r.videoIn, r.artemisOut = io.Pipe()
+	r.videoIn, r.artemisOut, err = os.Pipe()
+	if err != nil {
+		return err
+	}
 
-	r.artemisCmd, err = r.env.SetUp(r.trackerCtx)
+	r.artemisCmd, err = r.env.SetUp()
 	r.artemisCmd.Stdout = r.artemisOut
 	if err != nil {
 		return err
@@ -116,13 +118,22 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 	}()
 
 	go func() {
-		//wait for either the TrackingEnv or own to be Done
+		//wait for either the env.Context or own to be Done
 		<-r.trackerCtx.Done()
+		// if another critical task or env.Context we need to signal
+		// artemis. artemis may have crashed but then the signal will
+		// simply be lost.
+		r.artemisCmd.Process.Signal(os.Interrupt)
 
-		// if already terminated, will do nothing
-		for !WaitDoneOrKill(r.artemisCmd, r.otherCtx.Done(), 500*time.Millisecond, r.logger, "artemis") {
+		// if already terminated, will do nothing (artemis crashed before signal).
+		for !WaitDoneOrFunc(r.otherCtx.Done(), 500*time.Millisecond, func(grace time.Duration) {
+			r.logger.Printf("killing artemis as it did not terminate after %s", grace)
+			r.cancelOther() // to avoid to mark X timeout while we wait for termination
+			if err := r.artemisCmd.Process.Kill(); err != nil {
+				r.logger.Printf("could not kill artemis: %s", err)
+			}
+		}) {
 		}
-
 	}()
 
 	return nil, r.waitAnyCriticalSubtask()
@@ -193,6 +204,8 @@ func (r *masterRunner) waitAnyCriticalSubtask() error {
 	chosen, v, ok := reflect.Select(cases)
 	task := criticalTasks[chosen]
 
+	r.logger.Printf("critical task %s exited", task)
+
 	if ok == false {
 		return fmt.Errorf("logic error: channel for task %s is closed", task)
 	}
@@ -206,10 +219,6 @@ func (r *masterRunner) waitAnyCriticalSubtask() error {
 	err, ok := ierr.(error)
 	if ok == false {
 		err = fmt.Errorf("logic error: task %s did not returned an error", task)
-	}
-
-	if chosen == 0 && err == context.Canceled {
-		return nil
 	}
 
 	return fmt.Errorf("critical task %s error: %w", task, err)

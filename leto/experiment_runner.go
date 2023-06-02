@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"time"
 
@@ -31,14 +32,14 @@ func newSlaveRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		logger: NewLogger("experiment-runner"),
 	}
 	var err error
-	res.artemisCmd, err = env.SetUp(env.Context)
+	res.artemisCmd, err = env.SetUp()
 	if err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
-func WaitDoneOrKill(cmd *exec.Cmd, done <-chan struct{}, grace time.Duration, logger *log.Logger, name string) bool {
+func WaitDoneOrFunc(done <-chan struct{}, grace time.Duration, f func(time.Duration)) bool {
 
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
@@ -47,10 +48,7 @@ func WaitDoneOrKill(cmd *exec.Cmd, done <-chan struct{}, grace time.Duration, lo
 		return true
 	case <-timer.C:
 	}
-	logger.Printf("killing %s as it did not terminate after %s", name, grace)
-	if err := cmd.Process.Kill(); err != nil {
-		logger.Printf("could not kill %s: %s", name, err)
-	}
+	f(grace)
 	return false
 
 }
@@ -68,10 +66,24 @@ func (r *slaveRunner) Run() (log *letopb.ExperimentLog, err error) {
 	go func() {
 		select {
 		case <-done:
+			// here artemis may simply have crashed before env.Context
+			// was canceled. Therefore we simply return to avoid to
+			// leak the go routine.
 			return
 		case <-r.env.Context.Done():
+			// we nicely ask artemis to interrupt (he will eventually
+			// close after finishing processing its current frame.
+			r.artemisCmd.Process.Signal(os.Interrupt)
 		}
-		WaitDoneOrKill(r.artemisCmd, done, 500*time.Millisecond, r.logger, "artemis")
+
+		// we ensure that we kill artemis if it does not comply
+		for !WaitDoneOrFunc(done, 500*time.Millisecond, func(grace time.Duration) {
+			r.logger.Printf("killing artemis as it did not exit after %s", grace)
+			if err := r.artemisCmd.Process.Kill(); err != nil {
+				r.logger.Printf("could not kill artemis: %s", err)
+			}
+		}) {
+		}
 	}()
 
 	r.logger.Printf("started")
