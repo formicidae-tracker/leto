@@ -25,6 +25,7 @@ type Options struct {
 	Port        int     `long:"port"`
 	CameraFps   float64 `long:"camera-fps"`
 	Uuid        string  `long:"uuid"`
+	Family      string  `long:"at-family"`
 }
 
 func main() {
@@ -51,6 +52,10 @@ func execute() error {
 	opt.VideoHeight /= 4
 
 	log.Printf("%+v", opt)
+
+	if opt.Family != "" {
+		return fmt.Errorf("this mock artemis does not support tag detection (received: %s)", opt.Family)
+	}
 
 	return opt.Run()
 }

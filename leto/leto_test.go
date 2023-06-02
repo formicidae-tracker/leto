@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/adrg/xdg"
 	"github.com/formicidae-tracker/hermes"
@@ -61,6 +62,10 @@ func (s *LetoSuite) SetUpTest(c *C) {
 	var err error
 	s.l, err = NewLeto(leto.DefaultConfig)
 	c.Check(err, IsNil)
+}
+
+func (s *LetoSuite) TearDownTest(c *C) {
+	s.l.Stop()
 }
 
 func (s *LetoSuite) TestAlreadyStopped(c *C) {
@@ -185,4 +190,22 @@ func (s *LetoSuite) TestE2E(c *C) {
 	mtype, err := mimetype.DetectFile(videopath)
 	c.Check(err, IsNil)
 	c.Check(mtype.Is("video/mp4"), Equals, true)
+}
+
+func (s *LetoSuite) TestArtemisFailure(c *C) {
+	conf := &leto.TrackingConfiguration{
+		ExperimentName: "detection-will-fail",
+		Detection: leto.TagDetectionConfiguration{
+			Family: newWithValue("36HARTag"),
+		},
+		Camera: leto.CameraConfiguration{
+			FPS: newWithValue(100.0),
+		},
+	}
+
+	c.Assert(s.l.Start(conf), IsNil)
+	time.Sleep(50 * time.Millisecond)
+	log := s.l.LastExperimentLog()
+	c.Assert(log, Not(IsNil))
+	c.Check(log.HasError, Equals, true)
 }
