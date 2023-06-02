@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"regexp"
 	"time"
 
+	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/leto/mock_main"
 	olympuspb "github.com/formicidae-tracker/olympus/api"
@@ -117,94 +117,63 @@ func (m *AlarmUpdateMatches) String() string {
 		m.Description)
 }
 
-func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
-	sync := make(chan int, 3)
+func (s *DiskWatcherSuite) TestWatcherDoNotAlarmIfFarFromLimits(c *C) {
+	sync := make(chan int, 1)
+	// when near to minutes, the tricks do not work well, simply we do
+	// not check the time computation nor the number sent.
+	s.olympus.EXPECT().
+		PushDiskStatus(gomock.Any(), gomock.Nil()).
+		Do(func(x, y any) {
+			sync <- 0
+		})
 
-	gomock.InOrder(
-		s.olympus.EXPECT().
-			PushDiskStatus(gomock.Any(), gomock.Any()).
-			Do(func(x, y any) {
-				sync <- 0
-				expected := &AlarmUpdateMatches{
-					Identification: "tracking.disk_status",
-					Level:          olympuspb.AlarmLevel_WARNING,
-					Status:         olympuspb.AlarmStatus_ON,
-					Description:    "low free disk space .*, will stop in ~ 11h",
-				}
-				c.Logf("%s", y.(*olympuspb.AlarmUpdate).Description)
-				c.Check(expected.Matches(y), Equals, true)
-			}),
-		s.olympus.EXPECT().
-			PushDiskStatus(gomock.Any(), gomock.Any()).
-			Do(func(x, y any) {
-				sync <- 1
-				c.Check(y, IsNil)
-			}), // do not report same alarm twice
-		s.olympus.EXPECT().
-			PushDiskStatus(gomock.Any(), gomock.Any()). // reports when alarms stops
-			Do(func(x, y any) {
-				sync <- 2
-				expected := &AlarmUpdateMatches{
-					Identification: "tracking.disk_status",
-					Level:          olympuspb.AlarmLevel_WARNING,
-					Status:         olympuspb.AlarmStatus_OFF,
-					Description:    "",
-				}
-				c.Check(expected.Matches(y), Equals, true)
-			}),
-	)
-
-	filenames := []string{
-		filepath.Join(s.Dir, c.TestName()+".1"),
-		filepath.Join(s.Dir, c.TestName()+".2"),
-	}
-	s.env.Start = time.Now()
-	s.env.FreeStartBytes, _, _ = fsStat(s.Dir)
-	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, 6*time.Hour)
+	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
+	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, humanize.Day)
 	errs := Start(s.watcher)
-	ioutil.WriteFile(filenames[0], make([]byte, filesize), 0644)
-
-	//wait for first report
 	<-sync
-
-	// rewrite a new file to keep same BPS, and produce the same alarm
-	ioutil.WriteFile(filenames[1], make([]byte, filesize), 0644)
-	<-sync
-
-	// removes all files to clear the alarm (effective BPS will become 0)
-	c.Assert(os.Remove(filenames[0]), IsNil)
-	c.Assert(os.Remove(filenames[1]), IsNil)
-	<-sync
-	// stops the watcher
 	s.cancel()
 	err, ok := <-errs
 	c.Check(err, IsNil)
 	c.Check(ok, Equals, true)
 }
 
-func (s *DiskWatcherSuite) TestWatcherCritsNearLimit(c *C) {
-	sync := make(chan int, 1)
-	// when near to minutes, the tricks do not work well, simply we do
-	// not check the time computation nor the number sent.
-	s.olympus.EXPECT().
-		PushDiskStatus(gomock.Any(), gomock.Any()).
-		Do(func(x, y any) {
-			sync <- 0
-			expected := &AlarmUpdateMatches{
-				Identification: "tracking.disk_status",
-				Level:          olympuspb.AlarmLevel_EMERGENCY,
-				Status:         olympuspb.AlarmStatus_ON,
-				Description:    "critically low free disk space .*, will stop in ~ .*",
-			}
-			c.Check(expected.Matches(y), Equals, true)
-		})
+func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
+	s.env.Leto.DiskLimit = 10 * 1024 * 1024 //10mB
+	status := &olympuspb.DiskStatus{
+		FreeBytes:      20 * 1024 * 1024, // 20 MiB
+		TotalBytes:     40 * 1024 * 1024, // 40 MiB
+		BytesPerSecond: 485,              // 10 MiB / ( 6 * 3600 s)
+	}
+	update := s.watcher.buildAlarmUpdate(status, time.Unix(32, 43))
+	c.Assert(update, Not(IsNil))
+	c.Check(update.Identification, Equals, "tracking.disk_status")
+	c.Check(update.Level, Equals, olympuspb.AlarmLevel_WARNING)
+	c.Check(update.Status, Equals, olympuspb.AlarmStatus_ON)
+	c.Check(update.Time.AsTime(), Equals, time.Unix(32, 43).UTC())
+	c.Check(update.Description, Equals, "low free disk space ( 20.0 MiB ), will stop in ~ 6h")
 
-	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
-	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, 3*time.Minute)
-	errs := Start(s.watcher)
-	<-sync
-	s.cancel()
-	err, ok := <-errs
-	c.Check(err, IsNil)
-	c.Check(ok, Equals, true)
+	// with almost the same state (1s later), it should not build a new one
+	status.FreeBytes -= 485
+	c.Check(s.watcher.buildAlarmUpdate(status, time.Unix(33, 6789)), IsNil)
+
+	// closer, it becomes an emergency
+	status.FreeBytes -= 485
+	status.BytesPerSecond = 3000
+	update = s.watcher.buildAlarmUpdate(status, time.Unix(34, 69))
+	c.Assert(update, Not(IsNil))
+	c.Check(update.Identification, Equals, "tracking.disk_status")
+	c.Check(update.Level, Equals, olympuspb.AlarmLevel_EMERGENCY)
+	c.Check(update.Status, Equals, olympuspb.AlarmStatus_ON)
+	c.Check(update.Time.AsTime(), Equals, time.Unix(34, 69).UTC())
+	c.Check(update.Description, Equals, "critically low free disk space ( 20.0 MiB ), will stop in ~ 58m0s")
+
+	// big drop in BPS will stop the alarm
+	status.BytesPerSecond = 0
+	update = s.watcher.buildAlarmUpdate(status, time.Unix(35, 12))
+	c.Assert(update, Not(IsNil))
+	c.Check(update.Identification, Equals, "tracking.disk_status")
+	c.Check(update.Level, Equals, olympuspb.AlarmLevel_WARNING)
+	c.Check(update.Status, Equals, olympuspb.AlarmStatus_OFF)
+	c.Check(update.Time.AsTime(), Equals, time.Unix(35, 12).UTC())
+	c.Check(update.Description, Equals, "")
 }

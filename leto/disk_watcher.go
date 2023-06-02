@@ -9,6 +9,7 @@ import (
 	"github.com/atuleu/go-humanize"
 	olympuspb "github.com/formicidae-tracker/olympus/api"
 	"golang.org/x/sys/unix"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func fsStat(path string) (free int64, total int64, err error) {
@@ -95,33 +96,34 @@ func (w *diskWatcher) computeETA(status *olympuspb.DiskStatus) time.Duration {
 	return time.Duration(float64(remaining) / float64(status.BytesPerSecond) * float64(time.Second))
 }
 
-func (w *diskWatcher) computeAlarmUpdate(status *olympuspb.DiskStatus) *olympuspb.AlarmUpdate {
+func (w *diskWatcher) computeAlarmUpdate(status *olympuspb.DiskStatus, now time.Time) *olympuspb.AlarmUpdate {
 	eta := w.computeETA(status)
 
 	update := &olympuspb.AlarmUpdate{
 		Identification: "tracking.disk_status",
 		Status:         olympuspb.AlarmStatus_OFF,
 		Level:          olympuspb.AlarmLevel_WARNING,
+		Time:           timestamppb.New(now),
 	}
 
 	if eta < 12*time.Hour {
 		update.Status = olympuspb.AlarmStatus_ON
-		update.Description = fmt.Sprintf("low free disk space %s, will stop in ~ %s",
-			humanize.ByteSize(status.FreeBytes), humanize.Duration(eta))
+		update.Description = fmt.Sprintf("low free disk space ( %s ), will stop in ~ %s",
+			humanize.ByteSize(status.FreeBytes), humanize.Duration(eta.Round(10*time.Minute)))
 	}
 
 	if eta < 1*time.Hour {
 		update.Status = olympuspb.AlarmStatus_ON
 		update.Level = olympuspb.AlarmLevel_EMERGENCY
-		update.Description = fmt.Sprintf("critically low free disk space %s, will stop in ~ %s",
-			humanize.ByteSize(status.FreeBytes), humanize.Duration(time.Minute))
+		update.Description = fmt.Sprintf("critically low free disk space ( %s ), will stop in ~ %s",
+			humanize.ByteSize(status.FreeBytes), humanize.Duration(eta.Round(time.Minute)))
 	}
 
 	return update
 }
 
 func (w *diskWatcher) buildAlarmUpdate(status *olympuspb.DiskStatus, now time.Time) *olympuspb.AlarmUpdate {
-	update := w.computeAlarmUpdate(status)
+	update := w.computeAlarmUpdate(status, now)
 
 	last := w.update
 	if last == nil {
