@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/adrg/xdg"
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/leto"
+	"github.com/gabriel-vasile/mimetype"
 	. "gopkg.in/check.v1"
 )
 
@@ -20,6 +22,10 @@ type LetoSuite struct {
 }
 
 var _ = Suite(&LetoSuite{})
+
+func checkFFMpeg() bool {
+	return exec.Command("ffmpeg", "-version").Run() == nil
+}
 
 func (s *LetoSuite) SetUpSuite(c *C) {
 	dir := c.MkDir()
@@ -36,7 +42,9 @@ func (s *LetoSuite) SetUpSuite(c *C) {
 	c.Check(xdg.DataHome, Equals, datadir)
 	c.Check(os.TempDir(), Equals, tmpdir)
 	artemisCommandName = "./mock_main/artemis/artemis"
-	ffmpegCommandName = "./mock_main/ffmpeg/ffmpeg"
+	if checkFFMpeg() == false {
+		ffmpegCommandName = "./mock_main/ffmpeg/ffmpeg"
+	}
 	coaxlinkFirmwareCommandName = "./mock_main/coaxlink-firmware/coaxlink-firmware"
 }
 
@@ -168,4 +176,13 @@ func (s *LetoSuite) TestE2E(c *C) {
 	c.Check(err, IsNil)
 	c.Check(len(f) >= 15, Equals, true)
 
+	if ffmpegCommandName != "ffmpeg" {
+		// mocked ffmpeg did not produce a video file
+		return
+	}
+
+	videopath := filepath.Join(xdg.DataHome, "fort-experiments", log.ExperimentDir, "stream.0000.mp4")
+	mtype, err := mimetype.DetectFile(videopath)
+	c.Check(err, IsNil)
+	c.Check(mtype.Is("video/mp4"), Equals, true)
 }
