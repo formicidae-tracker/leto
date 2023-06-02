@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"reflect"
 	"sync"
 	"time"
 
@@ -28,8 +27,8 @@ type masterRunner struct {
 	dispatcher        FrameDispatcher
 	olympus           OlympusTask
 
-	trackerCtx, otherCtx       context.Context
-	cancelTracker, cancelOther context.CancelFunc
+	trackerCtx, otherCtx             context.Context
+	cancelLocalTracker, cancelOthers context.CancelFunc
 
 	artemisOut, videoIn *os.File
 
@@ -41,13 +40,13 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	trackerCtx, cancelTracker := context.WithCancel(env.Context)
 	otherCtx, cancelOther := context.WithCancel(context.Background())
 	res := &masterRunner{
-		env:           env,
-		subtasks:      make(map[string]<-chan error),
-		trackerCtx:    trackerCtx,
-		otherCtx:      otherCtx,
-		cancelTracker: cancelTracker,
-		cancelOther:   cancelOther,
-		logger:        NewLogger("runner"),
+		env:                env,
+		subtasks:           make(map[string]<-chan error),
+		trackerCtx:         trackerCtx,
+		otherCtx:           otherCtx,
+		cancelLocalTracker: cancelTracker,
+		cancelOthers:       cancelOther,
+		logger:             NewLogger("runner"),
 	}
 	if err := res.SetUp(); err != nil {
 		return nil, err
@@ -112,11 +111,6 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 
 	r.startSubtasks()
 
-	defer func() {
-		r.stopAllSubtask()
-		r.waitAllSubtask()
-	}()
-
 	go func() {
 		//wait for either the env.Context or own to be Done
 		<-r.trackerCtx.Done()
@@ -128,7 +122,7 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 		// if already terminated, will do nothing (artemis crashed before signal).
 		for !WaitDoneOrFunc(r.otherCtx.Done(), 500*time.Millisecond, func(grace time.Duration) {
 			r.logger.Printf("killing artemis as it did not terminate after %s", grace)
-			r.cancelOther() // to avoid to mark X timeout while we wait for termination
+			r.cancelOthers() // to avoid to mark X timeout while we wait for termination
 			if err := r.artemisCmd.Process.Kill(); err != nil {
 				r.logger.Printf("could not kill artemis: %s", err)
 			}
@@ -136,7 +130,17 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 		}
 	}()
 
-	return nil, r.waitAnyCriticalSubtask()
+	err = r.waitAnyCriticalSubtask()
+
+	r.stopLocalTracker()
+	lerr := r.waitForLocalTracker()
+	if err == nil {
+		err = lerr
+	}
+	r.stopAllOtherSubtasks()
+	r.waitAllSubtasks()
+
+	return nil, err
 }
 
 func (r *masterRunner) startSubtasks() {
@@ -154,20 +158,11 @@ func (r *masterRunner) startSubtasks() {
 	// slaves must be started before local tracker !!
 	r.startSlaves()
 
-	r.startSubtaskFunction(func() error {
-		defer func() {
-			r.logger.Printf("local-tracker is done")
-			r.cancelOther()
-			err := r.artemisOut.Close()
-			if err != nil {
-				r.logger.Printf("could not close pipe: %s", err)
-			}
-		}()
-		return r.artemisCmd.Run()
-	}, "local-tracker")
 	if r.olympus != nil {
 		r.startSubtask(r.olympus, "olympus-registration")
 	}
+
+	r.startSubtask(r.artemisCmd, "local-tracker")
 }
 
 func (r *masterRunner) startSubtask(t Task, name string) {
@@ -187,46 +182,50 @@ func (r *masterRunner) mergeFrames() func() error {
 }
 
 func (r *masterRunner) waitAnyCriticalSubtask() error {
-	criticalTasks := []string{
-		"local-tracker", "artemis-in", "frame-merger",
-		"frame-dispatcher", "writer", "video", "disk-watcher",
+	name := ""
+	var err error
+	select {
+	case err = <-r.subtasks["local-tracker"]:
+		name = "local-tracker"
+	case err = <-r.subtasks["artemis-in"]:
+		name = "artemis-in"
+	case err = <-r.subtasks["frame-merger"]:
+		name = "frame-merger"
+	case err = <-r.subtasks["frame-dispatcher"]:
+		name = "frame-dispatcher"
+	case err = <-r.subtasks["writer"]:
+		name = "writer"
+	case err = <-r.subtasks["video"]:
+		name = "video"
+	case err = <-r.subtasks["disk-watcher"]:
+		name = "disk-watcher"
 	}
 
-	cases := make([]reflect.SelectCase, len(criticalTasks))
-	for i, name := range criticalTasks {
-		errs := r.subtasks[name]
-		cases[i] = reflect.SelectCase{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.ValueOf(errs),
-		}
+	if err == nil && name != "local-tracker" {
+		return fmt.Errorf("critical task %s exited early without an error", name)
 	}
-
-	chosen, v, ok := reflect.Select(cases)
-	task := criticalTasks[chosen]
-
-	r.logger.Printf("critical task %s exited", task)
-
-	if ok == false {
-		return fmt.Errorf("logic error: channel for task %s is closed", task)
-	}
-
-	ierr := v.Interface()
-
-	if ierr == nil {
-		return nil
-	}
-
-	err, ok := ierr.(error)
-	if ok == false {
-		err = fmt.Errorf("logic error: task %s did not returned an error", task)
-	}
-
-	return fmt.Errorf("critical task %s error: %w", task, err)
+	return err
 }
 
-func (r *masterRunner) stopAllSubtask() {
+func (r *masterRunner) stopLocalTracker() {
 	r.stopSlaves()
-	r.cancelTracker()
+	r.cancelLocalTracker()
+}
+
+func (r *masterRunner) waitForLocalTracker() error {
+	err := <-r.subtasks["local-tracker"]
+	if cerr := r.artemisOut.Close(); cerr != nil {
+		r.logger.Printf("could not close artemis out pipe: %s", cerr)
+	}
+	return err
+}
+
+func (r *masterRunner) stopAllOtherSubtasks() {
+	err := r.artemisOut.Close()
+	if err != nil {
+		r.logger.Printf("could not kill artemis out pipe: %s", err)
+	}
+	r.cancelOthers()
 }
 
 func Min[T constraints.Ordered](a, b T) T {
@@ -236,7 +235,7 @@ func Min[T constraints.Ordered](a, b T) T {
 	return b
 }
 
-func (r *masterRunner) waitAllSubtask() {
+func (r *masterRunner) waitAllSubtasks() {
 	wg := sync.WaitGroup{}
 	wg.Add(len(r.subtasks))
 
