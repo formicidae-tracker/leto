@@ -18,8 +18,8 @@ import (
 
 type LetoGRPCWrapper struct {
 	letopb.UnimplementedLetoServer
-	artemis *Leto
-	logger  *log.Logger
+	leto   *Leto
+	logger *log.Logger
 }
 
 func (l *LetoGRPCWrapper) StartTracking(c context.Context, request *letopb.StartRequest) (*letopb.Empty, error) {
@@ -30,7 +30,7 @@ func (l *LetoGRPCWrapper) StartTracking(c context.Context, request *letopb.Start
 
 	l.logger.Printf("new start request for experiment '%s'", config.ExperimentName)
 
-	err = l.artemis.Start(config)
+	err = l.leto.Start(config)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (l *LetoGRPCWrapper) StartTracking(c context.Context, request *letopb.Start
 
 func (l *LetoGRPCWrapper) StopTracking(context.Context, *letopb.Empty) (*letopb.Empty, error) {
 	l.logger.Printf("new stop request")
-	err := l.artemis.Stop()
+	err := l.leto.Stop()
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (l *LetoGRPCWrapper) StopTracking(context.Context, *letopb.Empty) (*letopb.
 }
 
 func (l *LetoGRPCWrapper) GetStatus(context.Context, *letopb.Empty) (*letopb.Status, error) {
-	return l.artemis.Status(), nil
+	return l.leto.Status(), nil
 }
 
 func (l *LetoGRPCWrapper) GetLastExperimentLog(context.Context, *letopb.Empty) (*letopb.ExperimentLog, error) {
@@ -57,7 +57,7 @@ func (l *LetoGRPCWrapper) GetLastExperimentLog(context.Context, *letopb.Empty) (
 func (l *LetoGRPCWrapper) checkTrackingLink(link *letopb.TrackingLink) (string, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		return "", status.Errorf(codes.Unavailable, "could not found hostname: %s", err)
+		return "", status.Errorf(codes.Unavailable, "could not get hostname: %s", err)
 	}
 
 	if link.Master != hostname && link.Slave != hostname {
@@ -89,11 +89,12 @@ func (l *LetoGRPCWrapper) Link(c context.Context, link *letopb.TrackingLink) (*l
 	}
 
 	if link.Slave == hostname {
-		if err := l.artemis.SetMaster(link.Master); err != nil {
+		if err := l.leto.SetMaster(link.Master); err != nil {
 			return nil, err
 		}
 		return &letopb.Empty{}, nil
 	}
+
 	slave, err := l.getSlave(link.Slave)
 	if err != nil {
 		return nil, err
@@ -104,10 +105,11 @@ func (l *LetoGRPCWrapper) Link(c context.Context, link *letopb.TrackingLink) (*l
 		return nil, err
 	}
 
-	err = l.artemis.AddSlave(link.Slave)
+	err = l.leto.AddSlave(link.Slave)
 	if err != nil {
 		return nil, err
 	}
+
 	return &letopb.Empty{}, nil
 }
 
@@ -117,7 +119,7 @@ func (l *LetoGRPCWrapper) Unlink(c context.Context, link *letopb.TrackingLink) (
 		return nil, err
 	}
 	if link.Slave == hostname {
-		err := l.artemis.SetMaster("")
+		err := l.leto.SetMaster("")
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +135,7 @@ func (l *LetoGRPCWrapper) Unlink(c context.Context, link *letopb.TrackingLink) (
 		return nil, err
 	}
 
-	err = l.artemis.RemoveSlave(link.Slave)
+	err = l.leto.RemoveSlave(link.Slave)
 	if err != nil {
 		return nil, err
 	}
@@ -146,13 +148,10 @@ func (l *LetoGRPCWrapper) Run(config leto.Config) error {
 		return err
 	}
 
-	l.artemis, err = NewLeto(config)
+	l.leto, err = NewLeto(config)
 	if err != nil {
 		return err
 	}
-
-	//TODO: move in application logic
-	l.artemis.LoadFromPersistentFile()
 
 	l.logger = NewLogger("gRPC")
 

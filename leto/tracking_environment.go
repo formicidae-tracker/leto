@@ -337,8 +337,8 @@ func (e *TrackingEnvironment) saveArtemisCommand(cmd *exec.Cmd) error {
 	return err
 }
 
-func (e *TrackingEnvironment) TearDown(hasError bool) (*letopb.ExperimentLog, error) {
-	log := e.buildLog(hasError)
+func (e *TrackingEnvironment) TearDown(err error) (*letopb.ExperimentLog, error) {
+	log := e.buildLog(err)
 	return log, e.removeTestExperimentData()
 }
 
@@ -349,7 +349,13 @@ func (e *TrackingEnvironment) removeTestExperimentData() error {
 	return os.RemoveAll(e.ExperimentDir)
 }
 
-func (e *TrackingEnvironment) buildLog(hasError bool) *letopb.ExperimentLog {
+func (e *TrackingEnvironment) buildLog(err error) *letopb.ExperimentLog {
+	hasError := err != nil
+	errorDescription := ""
+	if hasError == true {
+		errorDescription = err.Error()
+	}
+
 	end := time.Now()
 	log, err := ioutil.ReadFile(e.Path("artemis.INFO"))
 	if err != nil {
@@ -364,8 +370,10 @@ func (e *TrackingEnvironment) buildLog(hasError bool) *letopb.ExperimentLog {
 	if err != nil {
 		yaml = []byte(fmt.Sprintf("could not generate yaml config: %s", err))
 	}
+
 	return &letopb.ExperimentLog{
 		HasError:          hasError,
+		Error:             errorDescription,
 		ExperimentDir:     filepath.Base(e.ExperimentDir),
 		Start:             timestamppb.New(e.Start),
 		End:               timestamppb.New(end),

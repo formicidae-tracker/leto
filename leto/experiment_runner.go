@@ -56,7 +56,7 @@ func WaitDoneOrFunc(done <-chan struct{}, grace time.Duration, f func(time.Durat
 func (r *slaveRunner) Run() (log *letopb.ExperimentLog, err error) {
 	defer func() {
 		var terr error
-		log, terr = r.env.TearDown(err != nil)
+		log, terr = r.env.TearDown(err)
 		if err == nil {
 			err = terr
 		}

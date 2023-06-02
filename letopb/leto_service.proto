@@ -33,6 +33,7 @@ message ExperimentLog {
 	google.protobuf.Timestamp end                = 5;
 	string                    yaml_configuration = 6;
 	bool                      has_error          = 7;
+	string                    error              = 8;
 }
 
 message TrackingLink {
