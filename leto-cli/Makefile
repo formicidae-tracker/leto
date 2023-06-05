@@ -5,7 +5,7 @@ leto-cli: *.go ../*.go ../letopb/*.go ../letopb/*.proto
 	go build
 
 check:
-	go test -check.v
+	go test
 	go vet
 
 clean:

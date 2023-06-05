@@ -24,7 +24,7 @@ var lastExperimentCommand = &LastExperimentLogCommand{}
 func (c *LastExperimentLogCommand) printSummary(name string, log *letopb.ExperimentLog) {
 	status := "\033[36m✓\033[m"
 	if log.HasError == true {
-		status = "\031[36m⚠\033[m"
+		status = "\033[31m⚠\033[m"
 	}
 
 	start := log.Start.AsTime()
@@ -33,14 +33,14 @@ func (c *LastExperimentLogCommand) printSummary(name string, log *letopb.Experim
 
 	timeFmt := "Monday _2 Jan 15:04:05 2006"
 
-	fmt.Printf("Experiment Name       : %s\n", name)
-	fmt.Printf("Experiment Output Dir : %s\n", log.ExperimentDir)
-	fmt.Printf("Experiment Start Date : %s\n", start.Local().Format(timeFmt))
-	fmt.Printf("Experiment End Date   : %s\n", end.Local().Format(timeFmt))
-	fmt.Printf("Experiment Duration   : %s\n", humanize.Duration(ellapsed))
-	fmt.Printf("Experiment Status     : %s\n", status)
+	fmt.Printf("Name       : %s\n", name)
+	fmt.Printf("Output Dir : %s\n", log.ExperimentDir)
+	fmt.Printf("Start Date : %s\n", start.Local().Format(timeFmt))
+	fmt.Printf("End Date   : %s\n", end.Local().Format(timeFmt))
+	fmt.Printf("Duration   : %s\n", humanize.Duration(ellapsed))
+	fmt.Printf("Status     : %s\n", status)
 	if log.HasError == true {
-		fmt.Printf("Experiment Error      : %s\n", log.Error)
+		fmt.Printf("Error      : %s\n", log.Error)
 	}
 }
 
@@ -73,24 +73,24 @@ func (c *LastExperimentLogCommand) printFooter(section string) {
 	if c.MultipleSections() == false {
 		return
 	}
-	fmt.Printf("\n=== End of %s ===\n\n", section)
+	fmt.Printf("\n=== End of %s ===\n", section)
 }
 
 func (c *LastExperimentLogCommand) printConfiguration(log *letopb.ExperimentLog) {
 	c.printHeader("Experiment YAML Configuration")
-	fmt.Println(log.YamlConfiguration)
+	fmt.Printf(log.YamlConfiguration)
 	c.printFooter("Experiment YAML Configuration")
 }
 
-func (c *LastExperimentLogCommand) printLog(log *letopb.ExperimentLog) {
+func (c *LastExperimentLogCommand) printArtemisLog(log *letopb.ExperimentLog) {
 	c.printHeader("Artemis INFO Log")
-	fmt.Println(log.YamlConfiguration)
+	fmt.Println(log.Log)
 	c.printFooter("Artemis INFO Log")
 }
 
 func (c *LastExperimentLogCommand) printStderr(log *letopb.ExperimentLog) {
 	c.printHeader("Artemis STDERR")
-	fmt.Println(log.YamlConfiguration)
+	fmt.Println(log.Stderr)
 	c.printFooter("Artemis STDERR")
 }
 
@@ -111,7 +111,15 @@ func (c *LastExperimentLogCommand) Execute(args []string) error {
 		return fmt.Errorf("Could not parse YAML configuration: %s", err)
 	}
 
-	if c.None() {
+	c.printLog(log, config)
+
+	return nil
+}
+
+func (c *LastExperimentLogCommand) printLog(log *letopb.ExperimentLog,
+	config leto.TrackingConfiguration) {
+
+	if c.All || c.None() {
 		c.printSummary(config.ExperimentName, log)
 	}
 
@@ -120,14 +128,12 @@ func (c *LastExperimentLogCommand) Execute(args []string) error {
 	}
 
 	if c.All || c.Log {
-		c.printLog(log)
+		c.printArtemisLog(log)
 	}
 
 	if c.All || c.Stderr {
 		c.printStderr(log)
 	}
-
-	return nil
 }
 
 func init() {
