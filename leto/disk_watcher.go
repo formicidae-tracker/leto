@@ -12,7 +12,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func fsStat(path string) (free int64, total int64, err error) {
+// getDiskSize returns the free and total bytes available on the disk
+// containing the file path. The fiel must exists.
+func getDiskSize(path string) (free int64, total int64, err error) {
 	var stat unix.Statfs_t
 
 	err = unix.Statfs(path, &stat)

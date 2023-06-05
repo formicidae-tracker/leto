@@ -41,9 +41,9 @@ func (s *DiskWatcherSuite) SetUpTest(c *C) {
 		ExperimentDir: s.Dir,
 		Leto:          leto.DefaultConfig,
 	}
-	var err error
 
-	s.env.FreeStartBytes, _, err = fsStat(s.Dir)
+	free, _, err := getDiskSize(s.Dir)
+
 	c.Assert(err, IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	s.watcher = NewDiskWatcher(ctx, s.env, s.olympus).(*diskWatcher)
@@ -51,6 +51,7 @@ func (s *DiskWatcherSuite) SetUpTest(c *C) {
 	s.cancel = cancel
 
 	s.env.Start = time.Now()
+	s.env.Rate = NewByteRateEstimator(free, s.env.Start)
 }
 
 func (s *DiskWatcherSuite) TearDownTest(c *C) {
@@ -58,10 +59,10 @@ func (s *DiskWatcherSuite) TearDownTest(c *C) {
 }
 
 func (s *DiskWatcherSuite) TestCanReadFs(c *C) {
-	free, total, err := fsStat(s.Dir)
+	free, total, err := getDiskSize(s.Dir)
 	c.Check(err, IsNil)
 	c.Check(total >= free, Equals, true)
-	free, total, err = fsStat(filepath.Join(s.Dir, "do-no-exist"))
+	free, total, err = getDiskSize(filepath.Join(s.Dir, "do-no-exist"))
 	c.Check(err, ErrorMatches, "could not get available size for .*: no such file or directory")
 	c.Check(free, Equals, int64(0))
 	c.Check(total, Equals, int64(0))
@@ -69,7 +70,7 @@ func (s *DiskWatcherSuite) TestCanReadFs(c *C) {
 
 func (s *DiskWatcherSuite) TestWatcherFailsWhenLimitExceed(c *C) {
 	timeout := 300 * time.Millisecond
-	s.env.Leto.DiskLimit = s.env.FreeStartBytes + 1000*1024
+	s.env.Leto.DiskLimit = s.env.Rate.freeStartBytes + 1000*1024
 	s.watcher.olympus = nil
 	errs := Start(s.watcher)
 	select {
@@ -128,7 +129,7 @@ func (s *DiskWatcherSuite) TestWatcherDoNotAlarmIfFarFromLimits(c *C) {
 		})
 
 	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
-	s.env.Leto.DiskLimit = computeDiskLimit(s.env.FreeStartBytes, humanize.Day)
+	s.env.Leto.DiskLimit = computeDiskLimit(s.env.Rate.freeStartBytes, humanize.Day)
 	errs := Start(s.watcher)
 	<-sync
 	s.cancel()

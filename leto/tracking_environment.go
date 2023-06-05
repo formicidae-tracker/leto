@@ -28,15 +28,15 @@ var artemisCommandName = "artemis"
 // be put), and TearDown() will compute the letopb.ExperimentLog once
 // done,
 type TrackingEnvironment struct {
-	Node           NodeConfiguration
-	Config         *leto.TrackingConfiguration
-	Balancing      *WorkloadBalance
-	TestMode       bool
-	ExperimentDir  string
-	Leto           leto.Config
-	Start          time.Time
-	FreeStartBytes int64
-	Context        context.Context
+	Node          NodeConfiguration
+	Config        *leto.TrackingConfiguration
+	Balancing     *WorkloadBalance
+	TestMode      bool
+	ExperimentDir string
+	Leto          leto.Config
+	Start         time.Time
+	Context       context.Context
+	Rate          *byteRateEstimator
 }
 
 func NewExperimentConfiguration(ctx context.Context, leto leto.Config, node NodeConfiguration, user *leto.TrackingConfiguration) (*TrackingEnvironment, error) {
@@ -269,8 +269,11 @@ func (e *TrackingEnvironment) TrackingCommandArgs() []string {
 }
 
 func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
+	var free int64
 	defer func() {
 		e.Start = time.Now()
+		e.Rate = NewByteRateEstimator(free, e.Start)
+
 	}()
 
 	if err := e.makeAllDestinationDirs(); err != nil {
@@ -281,15 +284,14 @@ func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
 		return nil, err
 	}
 
-	var err error
-	e.FreeStartBytes, _, err = fsStat(e.ExperimentDir)
+	free, _, err := getDiskSize(e.ExperimentDir)
 	if err != nil {
 		return nil, err
 	}
 
-	if e.FreeStartBytes < e.Leto.DiskLimit {
+	if free < e.Leto.DiskLimit {
 		return nil, fmt.Errorf("unsufficient disk space: available: %s minimum: %s",
-			humanize.ByteSize(e.FreeStartBytes),
+			humanize.ByteSize(free),
 			humanize.ByteSize(e.Leto.DiskLimit))
 	}
 
@@ -385,17 +387,15 @@ func (e *TrackingEnvironment) buildLog(err error) *letopb.ExperimentLog {
 }
 
 func (e *TrackingEnvironment) WatchDisk(now time.Time) (free int64, total int64, bps int64, err error) {
-	if e.Start.Equal(time.Time{}) {
+	if e.Rate == nil {
 		return 0, 0, 0, errors.New("environment not setup")
 	}
 
-	free, total, err = fsStat(e.ExperimentDir)
+	free, total, err = getDiskSize(e.ExperimentDir)
 	if err != nil {
 		return free, total, 0, err
 	}
-	ellapsed := now.Sub(e.Start).Seconds()
-	written := e.FreeStartBytes - free
-	bps = int64(float64(written) / ellapsed)
+	bps = e.Rate.Estimate(free, now)
 
 	return free, total, bps, nil
 }

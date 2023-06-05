@@ -126,7 +126,7 @@ func (l *Leto) addDiskInfoToStatus(status *letopb.Status) {
 	}()
 
 	if l.isStarted() == false {
-		status.FreeBytes, status.TotalBytes, err = fsStat(xdg.DataHome)
+		status.FreeBytes, status.TotalBytes, err = getDiskSize(xdg.DataHome)
 		return
 	}
 	status.FreeBytes, status.TotalBytes, status.BytesPerSecond, err = l.env.WatchDisk(time.Now())
