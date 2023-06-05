@@ -109,7 +109,7 @@ func (c *ScanCommand) printStatuses(now time.Time, statuses <-chan Result) {
 	for r := range statuses {
 		line := ResultTableLine{
 			Node:   strings.TrimPrefix(r.Instance, "leto."),
-			Status: "…",
+			Status: "\033[1;96m…\033[m",
 		}
 		if len(r.Status.Master) != 0 {
 			line.Links = "↦ " + strings.TrimPrefix(r.Status.Master, "leto.")
@@ -126,7 +126,7 @@ func (c *ScanCommand) printStatuses(now time.Time, statuses <-chan Result) {
 			r.Status.TotalBytes)
 
 		if r.Status.Experiment != nil {
-			line.Status = "✓"
+			line.Status = "\033[1;92m✓\033[m"
 			config := leto.TrackingConfiguration{}
 			yaml.Unmarshal([]byte(r.Status.Experiment.YamlConfiguration), &config)
 			line.Experiment = config.ExperimentName
@@ -152,7 +152,7 @@ func (c *ScanCommand) printStatuses(now time.Time, statuses <-chan Result) {
 		if lines[i].Status == lines[j].Status {
 			return lines[i].Node < lines[j].Node
 		}
-		return lines[i].Status == "✓"
+		return strings.Contains(lines[i].Status, "✓")
 	})
 
 	tablifier.Tablify(lines)

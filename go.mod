@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/adrg/xdg v0.2.1
 	github.com/atuleu/go-humanize v0.0.0-20230602193851-3c422bf7e236
-	github.com/atuleu/go-tablifier v0.1.0
+	github.com/atuleu/go-tablifier v0.2.1
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/formicidae-tracker/hermes v0.2.0
 	github.com/formicidae-tracker/olympus v0.4.1-0.20230525115407-4d9e51817ab1
