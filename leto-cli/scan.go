@@ -3,14 +3,17 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/atuleu/go-humanize"
 	"github.com/atuleu/go-tablifier"
 	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/letopb"
+	"golang.org/x/exp/constraints"
 	"gopkg.in/yaml.v2"
 )
 
@@ -32,11 +35,12 @@ func (r Result) running() int {
 }
 
 type ResultTableLine struct {
-	Status     string
+	Status     string `name:" "`
 	Node       string
 	Experiment string
 	Since      string
-	Space      string
+	Space      string `name:"Space Used"`
+	Remaining  string
 	Links      string
 }
 
@@ -69,16 +73,43 @@ func (c *ScanCommand) Execute(args []string) error {
 		log.Printf("Could not fetch status: %s", err)
 	}
 
-	lines := make([]ResultTableLine, 0, len(nodes))
-
 	now := time.Now()
+
+	c.printStatuses(now, statuses)
+
+	return nil
+}
+
+func Max[T constraints.Ordered](a, b T) T {
+	if a > b {
+		return a
+	}
+
+	return b
+}
+
+var prefixes = []string{"", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei"}
+
+func formatByteFraction(a, b int64) string {
+	prefix := ""
+	v := float64(Max(a, b))
+	div := 1.0
+	for _, prefix = range prefixes {
+		if math.Abs(v/div) < 1024 {
+			break
+		}
+		div *= 1024.0
+	}
+	return fmt.Sprintf("%.1f / %.1f %sB", float64(a)/div, float64(b)/div, prefix)
+}
+
+func (c *ScanCommand) printStatuses(now time.Time, statuses <-chan Result) {
+	lines := make([]ResultTableLine, 0)
 
 	for r := range statuses {
 		line := ResultTableLine{
-			Node:       strings.TrimPrefix(r.Instance, "leto."),
-			Status:     "Idle",
-			Experiment: "N.A.",
-			Since:      "N.A.",
+			Node:   strings.TrimPrefix(r.Instance, "leto."),
+			Status: "…",
 		}
 		if len(r.Status.Master) != 0 {
 			line.Links = "↦ " + strings.TrimPrefix(r.Status.Master, "leto.")
@@ -89,13 +120,30 @@ func (c *ScanCommand) Execute(args []string) error {
 			}
 			line.Links = strings.Join(slaves, ",")
 		}
+
+		line.Space = formatByteFraction(
+			Max(0, r.Status.TotalBytes-r.Status.FreeBytes),
+			r.Status.TotalBytes)
+
 		if r.Status.Experiment != nil {
-			line.Status = "Running"
+			line.Status = "✓"
 			config := leto.TrackingConfiguration{}
 			yaml.Unmarshal([]byte(r.Status.Experiment.YamlConfiguration), &config)
 			line.Experiment = config.ExperimentName
-			ellapsed := now.Sub(r.Status.Experiment.Since.AsTime()).Round(time.Second)
-			line.Since = fmt.Sprintf("%s", ellapsed)
+			ellapsed := now.Sub(r.Status.Experiment.Since.AsTime()).Round(time.Minute)
+			line.Since = fmt.Sprintf("%s", humanize.Duration(ellapsed))
+
+			if r.Status.BytesPerSecond > 100 {
+				rem := time.Duration(float64(r.Status.FreeBytes) /
+					float64(r.Status.BytesPerSecond) *
+					float64(time.Second))
+
+				line.Remaining = fmt.Sprintf("%s",
+					humanize.Duration(rem.Round(time.Minute)))
+			} else {
+				line.Remaining = fmt.Sprintf("∞")
+			}
+
 		}
 		lines = append(lines, line)
 	}
@@ -104,12 +152,11 @@ func (c *ScanCommand) Execute(args []string) error {
 		if lines[i].Status == lines[j].Status {
 			return lines[i].Node < lines[j].Node
 		}
-		return lines[i].Status == "Running"
+		return lines[i].Status == "✓"
 	})
 
 	tablifier.Tablify(lines)
 
-	return nil
 }
 
 func init() {
