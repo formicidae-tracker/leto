@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  leto:
+    build:
+      context: .
+    hostname: leto-dev
+    devices:
+      - /dev/dri/card0
+    volumes:
+      - ./frames:/data
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - $HOME/.Xauthority:/home/fort-user/.Xauthority
+    command:
+      - --dev
+    environment:
+      - DISPLAY
+    ports:
+      - "4000:4000" # gRPC
+      - "4001:4001" # trackers, if using master slave.
+      - "4002:4002" # Broadcast
