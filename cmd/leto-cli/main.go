@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"os"
 	"strings"
 
 	"github.com/formicidae-tracker/leto/internal/leto"
@@ -53,14 +53,16 @@ func Execute() error {
 	}
 
 	_, err = parser.Parse()
-	if ferr, ok := err.(*flags.Error); ok == true && ferr.Type == flags.ErrHelp {
-		err = nil
+	if err != nil &&
+		flags.WroteHelp(err) == true {
+		return nil
 	}
+
 	return err
 }
 
 func main() {
 	if err := Execute(); err != nil {
-		log.Fatalf("Unhandled error")
+		os.Exit(2)
 	}
 }

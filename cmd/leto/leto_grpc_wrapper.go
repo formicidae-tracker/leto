@@ -51,7 +51,11 @@ func (l *LetoGRPCWrapper) GetStatus(context.Context, *letopb.Empty) (*letopb.Sta
 }
 
 func (l *LetoGRPCWrapper) GetLastExperimentLog(context.Context, *letopb.Empty) (*letopb.ExperimentLog, error) {
-	return nil, fmt.Errorf("Not yet implemented")
+	last := l.leto.LastExperimentLog()
+	if last == nil {
+		return nil, status.Error(codes.FailedPrecondition, "no experiment run on node.")
+	}
+	return last, nil
 }
 
 func (l *LetoGRPCWrapper) checkTrackingLink(link *letopb.TrackingLink) (string, error) {
