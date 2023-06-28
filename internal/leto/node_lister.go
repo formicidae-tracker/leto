@@ -16,6 +16,7 @@ import (
 	"github.com/grandcat/zeroconf"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/credentials/insecure"
 	"gopkg.in/yaml.v2"
 )
 
@@ -37,6 +38,7 @@ func (n Node) DialAddress() string {
 func (n Node) Connect() (*grpc.ClientConn, letopb.LetoClient, error) {
 	conn, err := grpc.Dial(
 		n.DialAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithConnectParams(
 			grpc.ConnectParams{
 				MinConnectTimeout: 2 * time.Second,
