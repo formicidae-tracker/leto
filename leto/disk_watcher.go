@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/atuleu/go-humanize"
-	olympuspb "github.com/formicidae-tracker/olympus/api"
+	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

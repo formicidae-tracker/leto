@@ -11,7 +11,7 @@ import (
 	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto"
 	"github.com/formicidae-tracker/leto/leto/mock_main"
-	olympuspb "github.com/formicidae-tracker/olympus/api"
+	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
 	"github.com/golang/mock/gomock"
 	. "gopkg.in/check.v1"
 )

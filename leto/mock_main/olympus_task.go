@@ -7,7 +7,7 @@ package mock_main
 import (
 	reflect "reflect"
 
-	api "github.com/formicidae-tracker/olympus/api"
+	api "github.com/formicidae-tracker/olympus/pkg/api"
 	gomock "github.com/golang/mock/gomock"
 )
 

@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	olympuspb "github.com/formicidae-tracker/olympus/api"
+	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
