@@ -46,6 +46,12 @@ func NewLeto(config leto.Config) (*Leto, error) {
 	if err := l.check(); err != nil {
 		return nil, err
 	}
+
+	err := os.MkdirAll(xdg.DataHome, 0755)
+	if err != nil {
+		return nil, err
+	}
+
 	l.LoadFromPersistentFile()
 	return l, nil
 }
