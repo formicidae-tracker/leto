@@ -1,12 +1,12 @@
 package main
 
 import (
-	"log"
 	"os"
 	"os/exec"
 	"time"
 
 	"github.com/formicidae-tracker/leto/pkg/letopb"
+	"github.com/sirupsen/logrus"
 )
 
 type ExperimentRunner interface {
@@ -16,7 +16,7 @@ type ExperimentRunner interface {
 type slaveRunner struct {
 	env        *TrackingEnvironment
 	artemisCmd *exec.Cmd
-	logger     *log.Logger
+	logger     *logrus.Entry
 }
 
 func NewExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
@@ -78,15 +78,15 @@ func (r *slaveRunner) Run() (log *letopb.ExperimentLog, err error) {
 
 		// we ensure that we kill artemis if it does not comply
 		for !WaitDoneOrFunc(done, 500*time.Millisecond, func(grace time.Duration) {
-			r.logger.Printf("killing artemis as it did not exit after %s", grace)
+			r.logger.Warnf("killing artemis as it did not exit after %s", grace)
 			if err := r.artemisCmd.Process.Kill(); err != nil {
-				r.logger.Printf("could not kill artemis: %s", err)
+				r.logger.WithField("error", err).Errorf("could not kill artemis")
 			}
 		}) {
 		}
 	}()
 
-	r.logger.Printf("started")
-	defer r.logger.Printf("done")
+	r.logger.Infof("started")
+	defer r.logger.Infof("done")
 	return nil, r.artemisCmd.Run()
 }

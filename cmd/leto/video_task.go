@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto/internal/leto"
+	"github.com/sirupsen/logrus"
 )
 
 var ffmpegCommandName = "ffmpeg"
@@ -177,7 +177,7 @@ type videoTask struct {
 
 	frameCorrespondance *os.File
 
-	logger *log.Logger
+	logger *logrus.Entry
 }
 
 func NewVideoManager(basedir string, fps float64, config leto.StreamConfiguration) (VideoTask, error) {

@@ -1,13 +1,9 @@
 package main
 
 import (
-	"io"
-	"log"
-	"os"
+	"github.com/sirupsen/logrus"
 )
 
-var logOut io.Writer = os.Stderr
-
-func NewLogger(domain string) *log.Logger {
-	return log.New(logOut, "["+domain+"] ", 0)
+func NewLogger(domain string) *logrus.Entry {
+	return logrus.WithField("group", domain)
 }

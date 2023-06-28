@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -11,6 +10,7 @@ import (
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/grandcat/zeroconf"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -19,7 +19,7 @@ import (
 type LetoGRPCWrapper struct {
 	letopb.UnimplementedLetoServer
 	leto   *Leto
-	logger *log.Logger
+	logger *logrus.Entry
 }
 
 func (l *LetoGRPCWrapper) StartTracking(c context.Context, request *letopb.StartRequest) (*letopb.Empty, error) {
@@ -28,7 +28,7 @@ func (l *LetoGRPCWrapper) StartTracking(c context.Context, request *letopb.Start
 		return nil, status.Errorf(codes.InvalidArgument, "could not parse configuration: %s", err)
 	}
 
-	l.logger.Printf("new start request for experiment '%s'", config.ExperimentName)
+	l.logger.WithField("experiment", config.ExperimentName).Info("new start request")
 
 	err = l.leto.Start(config)
 	if err != nil {
@@ -38,7 +38,7 @@ func (l *LetoGRPCWrapper) StartTracking(c context.Context, request *letopb.Start
 }
 
 func (l *LetoGRPCWrapper) StopTracking(context.Context, *letopb.Empty) (*letopb.Empty, error) {
-	l.logger.Printf("new stop request")
+	l.logger.Infof("new stop request")
 	err := l.leto.Stop()
 	if err != nil {
 		return nil, err
@@ -47,10 +47,13 @@ func (l *LetoGRPCWrapper) StopTracking(context.Context, *letopb.Empty) (*letopb.
 }
 
 func (l *LetoGRPCWrapper) GetStatus(context.Context, *letopb.Empty) (*letopb.Status, error) {
+	l.logger.Trace("get status")
 	return l.leto.Status(), nil
 }
 
 func (l *LetoGRPCWrapper) GetLastExperimentLog(context.Context, *letopb.Empty) (*letopb.ExperimentLog, error) {
+	l.logger.Trace("get last experiment log")
+
 	last := l.leto.LastExperimentLog()
 	if last == nil {
 		return nil, status.Error(codes.FailedPrecondition, "no experiment run on node.")
@@ -182,14 +185,14 @@ func (l *LetoGRPCWrapper) Run(config leto.Config) error {
 	go func() {
 		server, err := zeroconf.Register("leto."+host, "_leto._tcp", "local.", config.LetoPort, nil, nil)
 		if err != nil {
-			l.logger.Printf("avahi register error: %s", err)
+			l.logger.WithError(err).Error("avahi register")
 			return
 		}
 		<-ctx.Done()
 		server.Shutdown()
 	}()
 
-	l.logger.Printf("listening on %s", addr)
+	l.logger.WithField("address", addr).Info("listening")
 
 	return server.Serve(lis)
 }

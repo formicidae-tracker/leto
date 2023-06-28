@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 // A server is a simple tcp server following the Task interface. It
@@ -18,7 +19,7 @@ type Server struct {
 	ctx         context.Context
 
 	listener net.Listener
-	logger   *log.Logger
+	logger   *logrus.Entry
 
 	onAccept func(context.Context, net.Conn)
 }

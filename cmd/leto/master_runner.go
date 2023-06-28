@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"sync"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/constraints"
 )
 
@@ -34,7 +34,7 @@ type masterRunner struct {
 	artemisOut, videoIn *os.File
 
 	subtasks map[string]<-chan error
-	logger   *log.Logger
+	logger   *logrus.Entry
 }
 
 func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
@@ -96,7 +96,7 @@ func (r *masterRunner) SetUp() error {
 	}
 	r.olympus, err = NewOlympusTask(r.otherCtx, r.env)
 	if err != nil {
-		r.logger.Printf("will not register to olympus: %s", err)
+		r.logger.WithError(err).Error("will not register to olympus")
 	}
 
 	return nil
@@ -124,10 +124,10 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 
 		// if already terminated, will do nothing (artemis crashed before signal).
 		for !WaitDoneOrFunc(r.otherCtx.Done(), 500*time.Millisecond, func(grace time.Duration) {
-			r.logger.Printf("killing artemis as it did not terminate after %s", grace)
+			r.logger.Warnf("killing artemis as it did not terminate after %s", grace)
 			r.cancelOthers() // to avoid to mark X timeout while we wait for termination
 			if err := r.artemisCmd.Process.Kill(); err != nil {
-				r.logger.Printf("could not kill artemis: %s", err)
+				r.logger.WithError(err).Error("could not kill artemis")
 			}
 		}) {
 		}
@@ -228,7 +228,7 @@ func (r *masterRunner) stopLocalTracker() {
 func (r *masterRunner) waitForLocalTracker() error {
 	err := <-r.subtasks["local-tracker"]
 	if cerr := r.artemisOut.Close(); cerr != nil {
-		r.logger.Printf("could not close artemis out pipe: %s", cerr)
+		r.logger.WithError(err).Warn("could not close artemis out pipe")
 	}
 	return err
 }
@@ -236,7 +236,8 @@ func (r *masterRunner) waitForLocalTracker() error {
 func (r *masterRunner) stopAllOtherSubtasks() {
 	err := r.artemisOut.Close()
 	if err != nil {
-		r.logger.Printf("could not kill artemis out pipe: %s", err)
+		r.logger.WithError(err).
+			Warn("could not kill artemis out pipe while cancelling other substasks")
 	}
 	r.cancelOthers()
 }
@@ -265,13 +266,19 @@ func (r *masterRunner) waitAllSubtasks() {
 					stop = true
 				case <-time.After(delay):
 					total += delay
-					r.logger.Printf("%s task still running after %s", name, total)
+					r.logger.WithFields(logrus.Fields{
+						"task":  name,
+						"after": total,
+					}).Warn("task still running ")
 					delay = Min(2*delay, 10*time.Second)
 				}
 			}
 
 			if err != nil {
-				r.logger.Printf("task %s terminated with error: %s", name, err)
+				r.logger.
+					WithField("task", name).
+					WithError(err).
+					Error("task terminated with error")
 			}
 		}(n, t)
 	}

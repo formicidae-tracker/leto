@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
+	"github.com/sirupsen/logrus"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v2"
@@ -33,7 +33,7 @@ type Leto struct {
 
 	lastExperimentLog *letopb.ExperimentLog
 
-	logger *log.Logger
+	logger *logrus.Entry
 }
 
 func NewLeto(config leto.Config) (*Leto, error) {
@@ -127,7 +127,7 @@ func (l *Leto) addDiskInfoToStatus(status *letopb.Status) {
 	var err error
 	defer func() {
 		if err != nil {
-			l.logger.Printf("could not get available disk space: %s", err)
+			l.logger.WithError(err).Errorf("could not get available disk space")
 		}
 	}()
 
@@ -166,10 +166,11 @@ func (l *Leto) start(user *leto.TrackingConfiguration) (err error) {
 	}
 
 	go func() {
-		l.logger.Printf("starting experiment %s", l.env.Config.ExperimentName)
+		l.logger.WithField("experiment",
+			l.env.Config.ExperimentName).Infof("starting experiment")
 		log, err := runner.Run()
 		if err != nil {
-			l.logger.Printf("experiment failed: %s", err)
+			l.logger.WithError(err).Error("experiment failed")
 		}
 
 		l.mx.Lock()
@@ -191,7 +192,8 @@ func (l *Leto) Stop() error {
 	if l.isStarted() == false {
 		return errors.New("already stopped")
 	}
-	l.logger.Printf("stopping experiment %s", l.env.Config.ExperimentName)
+	l.logger.WithField("experiment",
+		l.env.Config.ExperimentName).Info("stopping experiment")
 	l.cancel()
 
 	// to avoid a deadlock, we must unlo
@@ -293,50 +295,61 @@ func (l *Leto) persitentFilePath() string {
 }
 
 func (l *Leto) writePersistentFile() {
+	logger := l.logger.WithField("path", l.persitentFilePath())
+
 	err := os.MkdirAll(filepath.Dir(l.persitentFilePath()), 0755)
 	if err != nil {
-		l.logger.Printf("could not create data dir for '%s': %s",
-			l.persitentFilePath(), err)
+		logger.
+			WithError(err).
+			Error("could not create destination directory")
 		return
 	}
 	configData, err := yaml.Marshal(l.env.Config)
 	if err != nil {
-		l.logger.Printf("could not marshal config data to persistent file: %s",
-			err)
+		logger.
+			WithError(err).
+			Error("could not marshal config data to persistent")
 		return
 	}
 	err = ioutil.WriteFile(l.persitentFilePath(), configData, 0644)
 	if err != nil {
-		l.logger.Printf("could not write persitent config file %s: %s",
-			l.persitentFilePath(), err)
+		l.logger.
+			WithError(err).
+			Error("could not write persitent config file")
 	}
 }
 
 func (l *Leto) removePersistentFile() {
 	err := os.Remove(l.persitentFilePath())
 	if err != nil {
-		l.logger.Printf("could not remove persitent file '%s': %s",
-			l.persitentFilePath(), err)
+		l.logger.
+			WithError(err).
+			WithField("path", l.persitentFilePath()).
+			Error("could not remove persitent file")
 	}
 }
 
 func (l *Leto) LoadFromPersistentFile() {
+	logger := l.logger.WithField("path", l.persitentFilePath())
 	configData, err := ioutil.ReadFile(l.persitentFilePath())
 	if err != nil {
+		if err != os.ErrNotExist {
+			logger.WithError(err).Error("could not read file")
+		}
 		// if there is no file, there is nothing to load
 		return
 	}
 	config := &leto.TrackingConfiguration{}
 	err = yaml.Unmarshal(configData, config)
 	if err != nil {
-		l.logger.Printf("could not load configuration from '%s': %s",
-			l.persitentFilePath(), err)
+		logger.
+			WithError(err).
+			Error("could not load persistent configuration")
 		return
 	}
-	l.logger.Printf("restarting experiment from '%s'", l.persitentFilePath())
+	logger.Info("restarting experiment from persistent file")
 	err = l.Start(config)
 	if err != nil {
-		l.logger.Printf("could not start experiment from '%s': %s",
-			l.persitentFilePath(), err)
+		logger.WithError(err).Error("could not restart experiment from persistent file")
 	}
 }

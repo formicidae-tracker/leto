@@ -3,13 +3,13 @@ package main
 import (
 	"compress/gzip"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/formicidae-tracker/hermes"
 	"github.com/golang/protobuf/proto"
+	"github.com/sirupsen/logrus"
 )
 
 type HermesFileWriter interface {
@@ -23,7 +23,7 @@ type hermesFileWriter struct {
 	lastname, lastUncompressedName string
 	file, uncompressed             *os.File
 	gzip                           *gzip.Writer
-	logger                         *log.Logger
+	logger                         *logrus.Entry
 	incoming                       chan *hermes.FrameReadout
 }
 
@@ -82,7 +82,10 @@ func (w *hermesFileWriter) openFile(filename, filenameUncompressed string, width
 		return err
 	}
 	_, err = w.uncompressed.Write(b.Bytes())
-	w.logger.Printf("writing to file '%s' and '%s'", filename, filenameUncompressed)
+	w.logger.WithFields(logrus.Fields{
+		"compressed-file":   filename,
+		"uncompressed-file": filenameUncompressed,
+	}).Infof("destination files")
 	return err
 }
 
@@ -96,7 +99,10 @@ func (w *hermesFileWriter) closeUncompressed() error {
 		return fmt.Errorf("could not close uncompressed file '%s': %w", w.lastUncompressedName, err)
 	}
 	if err := os.RemoveAll(w.lastUncompressedName); err != nil {
-		w.logger.Printf("could not remove last uncompressed segment '%s': %s", w.lastUncompressedName, err)
+		w.logger.WithFields(logrus.Fields{
+			"file":  w.lastUncompressedName,
+			"error": err,
+		}).Errorf("could not remove last uncompressed segment")
 	}
 
 	return nil
@@ -130,7 +136,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.Printf("additional close error: %s", err)
+			w.logger.WithField("error", err).Errorf("additional close error for uncompressed file")
 		}
 	}()
 	defer func() {
@@ -139,7 +145,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.Printf("additional close error: %s", err)
+			w.logger.WithField("error", err).Errorf("additional close error for compressed file")
 		}
 	}()
 	defer func() {
@@ -147,7 +153,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.Printf("additional close error: %s", err)
+			w.logger.WithField("error", err).Errorf("additional close error for GZIP stream")
 		}
 	}()
 

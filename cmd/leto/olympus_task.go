@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"time"
 
 	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -33,7 +33,7 @@ type olympusTask struct {
 
 	incoming   chan statusAndAlarm
 	connection *olympuspb.TrackingConnection
-	logger     *log.Logger
+	logger     *logrus.Entry
 	ctx        context.Context
 }
 
@@ -66,6 +66,13 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 }
 
 func (t *olympusTask) PushDiskStatus(status *olympuspb.DiskStatus, update *olympuspb.AlarmUpdate) {
+	defer func() {
+		err := recover()
+		if err != nil {
+			t.logger.Printf("push failure: %s", err)
+		}
+	}()
+
 	t.incoming <- statusAndAlarm{Status: status, Update: update}
 }
 
@@ -75,14 +82,14 @@ func (t *olympusTask) Run() error {
 		close(t.incoming)
 	}()
 
-	defer t.connection.CloseAll(t.logger)
+	defer t.connection.CloseAll(nil)
 
 	connections, connErrors := t.asyncConnect(nil)
 
 	for {
 		if t.connection.Established() == false && connErrors == nil && connections == nil {
-			t.connection.CloseAll(t.logger)
-			time.Sleep(time.Duration(float64(2*time.Second) * (1.0 + 0.2*rand.Float64())))
+			t.connection.CloseAll(nil)
+			time.Sleep(time.Duration(float64(1*time.Second) * (1.0 + 0.2*rand.Float64())))
 			t.logger.Printf("reconnection")
 			connections, connErrors = t.asyncConnect(t.connection.ClienConn())
 		}
@@ -92,7 +99,7 @@ func (t *olympusTask) Run() error {
 				connErrors = nil
 			} else {
 				t.logger.Printf("gRPC connection failure: %s", err)
-				t.connection.CloseAll(t.logger)
+				t.connection.CloseAll(nil)
 			}
 		case newConn, ok := <-connections:
 			if ok == false {
@@ -107,7 +114,7 @@ func (t *olympusTask) Run() error {
 			err := t.handleStatus(st)
 			if err != nil {
 				t.logger.Printf("gRPC failure: %s", err)
-				t.connection.CloseStream(t.logger)
+				t.connection.CloseStream(nil)
 			}
 		}
 	}
@@ -128,7 +135,7 @@ func (t *olympusTask) asyncConnect(conn *grpc.ClientConn) (<-chan *olympuspb.Tra
 	}
 
 	return olympuspb.ConnectTrackingAsync(conn,
-		t.address, t.declaration, t.logger, dialOptions...)
+		t.address, t.declaration, nil, dialOptions...)
 }
 
 func (t *olympusTask) handleStatus(st statusAndAlarm) error {

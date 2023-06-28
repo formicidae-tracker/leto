@@ -8,17 +8,17 @@ require (
 	github.com/atuleu/go-tablifier v0.2.1
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/formicidae-tracker/hermes v0.2.0
-	github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230627120345-bafc093b8582
+	github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230628143137-47aed469d227
 	github.com/gabriel-vasile/mimetype v1.4.2
 	github.com/golang/mock v1.6.0
-	github.com/golang/protobuf v1.5.2
-	github.com/google/uuid v1.1.2
+	github.com/golang/protobuf v1.5.3
+	github.com/google/uuid v1.3.0
 	github.com/grandcat/zeroconf v0.0.0-20190424104450-85eadb44205c
 	github.com/jessevdk/go-flags v1.5.0
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/sys v0.9.0
-	google.golang.org/grpc v1.49.0
-	google.golang.org/protobuf v1.27.1
+	google.golang.org/grpc v1.56.1
+	google.golang.org/protobuf v1.31.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/yaml.v2 v2.2.3
 )
@@ -32,9 +32,10 @@ require (
 	github.com/miekg/dns v1.1.10 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	golang.org/x/crypto v0.10.0 // indirect
-	golang.org/x/net v0.10.0 // indirect
+	golang.org/x/net v0.11.0 // indirect
 	golang.org/x/text v0.10.0 // indirect
-	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
