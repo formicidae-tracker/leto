@@ -1,23 +1,23 @@
-all: leto leto/leto leto-cli/leto-cli check
+all: leto pkg/letopb cmd/leto/leto cmd/leto-cli/leto-cli check
 
-leto: *.go letopb/*.go letopb/*.proto
-	go generate
-	go build
+leto:
+	make -C internal/leto
+	make -C pkg/letopb
 
 check:
-	go test -check.v
-	go vet
-	make -C leto check
-	make -C leto-cli check
+	make -C internal/leto check
+	make -C pkg/letopb check
+	make -C cmd/leto check
+	make -C cmd/leto-cli check
 
-leto/leto: *.go letopb/*.proto letopb/*.go leto/*.go
-	make -C leto leto
+cmd/leto/leto:
+	make -C cmd/leto
 
-leto-cli/leto-cli: *.go letopb/*.go letopb/*.proto leto-cli/*.go
-	make -C leto-cli leto-cli
+cmd/leto-cli/leto-cli:
+	make -C cmd/leto-cli
 
 clean:
-	make -C leto clean
-	make -C leto-cli clean
+	make -C cmd/leto clean
+	make -C cmd/leto-cli clean
 
-.PHONY: clean leto  check
+.PHONY: clean leto check cmd/leto/leto cmd/leto-cli/leto-cli

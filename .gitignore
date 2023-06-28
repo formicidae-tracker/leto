@@ -1,10 +1,2 @@
-leto/leto
 cover.out
-/leto-cli/leto-cli
-/hermes-reader/hermes-reader
-/prime/
 *.snap
-version.go
-/leto/mock_main/artemis/artemis
-/leto/mock_main/ffmpeg/ffmpeg
-/leto/mock_main/coaxlink-firmware/coaxlink-firmware
