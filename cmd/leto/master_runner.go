@@ -11,6 +11,7 @@ import (
 
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/constraints"
 )
@@ -47,7 +48,7 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		otherCtx:           otherCtx,
 		cancelLocalTracker: cancelTracker,
 		cancelOthers:       cancelOther,
-		logger:             NewLogger("runner"),
+		logger:             tm.NewLogger("runner"),
 		artemisStarted:     make(chan struct{}),
 	}
 	if err := res.SetUp(); err != nil {

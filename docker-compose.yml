@@ -5,6 +5,9 @@ services:
     build:
       context: .
     hostname: leto-dev
+    extra_hosts:
+      - olympus-dev:host-gateway
+      - signoz:host-gateway
     devices:
       - /dev/dri/card0
     volumes:
@@ -15,6 +18,8 @@ services:
       - --dev
     environment:
       - DISPLAY
+      - LETO_LOGSTASH_ENDPOINT=signoz:3333
+      - LETO_OTEL_ENDPOINT=signoz:4317
     ports:
       - "4000:4000" # gRPC
       - "4001:4001" # trackers, if using master slave.

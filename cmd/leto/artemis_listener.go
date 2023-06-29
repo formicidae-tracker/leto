@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 )
 
 type ArtemisListener interface {
@@ -47,7 +48,7 @@ func (l *artemisListener) Run() error {
 }
 
 func (l *artemisListener) onAccept(ctx context.Context, conn net.Conn) {
-	logger := NewLogger(fmt.Sprintf("artemis-in/%s", conn.RemoteAddr()))
+	logger := tm.NewLogger(fmt.Sprintf("artemis-in/%s", conn.RemoteAddr()))
 	logger.Printf("start reading incoming frames")
 	errors := make(chan error)
 	go func() {

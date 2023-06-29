@@ -15,6 +15,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -40,7 +41,7 @@ func NewLeto(config leto.Config) (*Leto, error) {
 	l := &Leto{
 		leto:   config,
 		node:   GetNodeConfiguration(),
-		logger: NewLogger("leto"),
+		logger: tm.NewLogger("leto"),
 	}
 	l.runnerCond = sync.NewCond(&l.mx)
 	if err := l.check(); err != nil {

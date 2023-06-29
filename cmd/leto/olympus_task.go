@@ -9,7 +9,9 @@ import (
 	"time"
 
 	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -59,7 +61,7 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 		address:     fmt.Sprintf("%s:%d", *target, env.Leto.OlympusPort),
 		declaration: declaration,
 		incoming:    incoming,
-		logger:      NewLogger("olympus-registration"),
+		logger:      tm.NewLogger("olympus-registration"),
 		connection:  &olympuspb.TrackingConnection{},
 		ctx:         ctx,
 	}, nil
@@ -132,6 +134,13 @@ func (t *olympusTask) asyncConnect(conn *grpc.ClientConn) (<-chan *olympuspb.Tra
 					MaxDelay:   2 * time.Second,
 				},
 			}),
+	}
+
+	if tm.Enabled() {
+		dialOptions = append(dialOptions,
+			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		)
 	}
 
 	return olympuspb.ConnectTrackingAsync(conn,

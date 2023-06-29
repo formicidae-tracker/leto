@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/ptypes"
 )
 
@@ -142,7 +143,7 @@ func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan 
 	betweenFrame := time.Duration(1.0e9/wb.FPS) * time.Nanosecond
 	timeout := time.Duration(2*wb.Stride+2) * betweenFrame
 
-	logger := NewLogger("frame-merger")
+	logger := tm.NewLogger("frame-merger")
 	for {
 		var timer *time.Timer = nil
 		var timeoutC <-chan time.Time = nil

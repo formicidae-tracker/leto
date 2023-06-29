@@ -9,8 +9,10 @@ import (
 
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/grandcat/zeroconf"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -160,9 +162,17 @@ func (l *LetoGRPCWrapper) Run(config leto.Config) error {
 		return err
 	}
 
-	l.logger = NewLogger("gRPC")
+	l.logger = tm.NewLogger("gRPC")
 
-	server := grpc.NewServer()
+	options := make([]grpc.ServerOption, 0, 2)
+	if tm.Enabled() {
+		options = append(options,
+			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+		)
+	}
+
+	server := grpc.NewServer(options...)
 	letopb.RegisterLetoServer(server, l)
 
 	addr := fmt.Sprintf(":%d", config.LetoPort)

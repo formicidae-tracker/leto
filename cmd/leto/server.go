@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,7 +26,7 @@ type Server struct {
 }
 
 func NewServer(ctx context.Context, port int, domain string, grace time.Duration) (*Server, error) {
-	logger := NewLogger(domain)
+	logger := tm.NewLogger(domain)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {

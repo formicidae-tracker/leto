@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/proto"
 	"github.com/sirupsen/logrus"
 )
@@ -32,7 +33,7 @@ func NewFrameReadoutWriter(filepath string) (HermesFileWriter, error) {
 	return &hermesFileWriter{
 		period:   2 * time.Hour,
 		basename: filepath,
-		logger:   NewLogger("file-writer"),
+		logger:   tm.NewLogger("file-writer"),
 		incoming: make(chan *hermes.FrameReadout, 200),
 	}, nil
 
@@ -136,7 +137,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.WithField("error", err).Errorf("additional close error for uncompressed file")
+			w.logger.WithError(err).Error("additional close error for uncompressed file")
 		}
 	}()
 	defer func() {
@@ -145,7 +146,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.WithField("error", err).Errorf("additional close error for compressed file")
+			w.logger.WithError(err).Error("additional close error for compressed file")
 		}
 	}()
 	defer func() {
@@ -153,7 +154,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.WithField("error", err).Errorf("additional close error for GZIP stream")
+			w.logger.WithError(err).Error("additional close error for GZIP stream")
 		}
 	}()
 

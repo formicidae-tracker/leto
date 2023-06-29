@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/leto/pkg/letopb"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,7 +30,7 @@ func NewExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 func newSlaveRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	res := &slaveRunner{
 		env:    env,
-		logger: NewLogger("experiment-runner"),
+		logger: tm.NewLogger("experiment-runner"),
 	}
 	var err error
 	res.artemisCmd, err = env.SetUp()
@@ -80,7 +81,7 @@ func (r *slaveRunner) Run() (log *letopb.ExperimentLog, err error) {
 		for !WaitDoneOrFunc(done, 500*time.Millisecond, func(grace time.Duration) {
 			r.logger.Warnf("killing artemis as it did not exit after %s", grace)
 			if err := r.artemisCmd.Process.Kill(); err != nil {
-				r.logger.WithField("error", err).Errorf("could not kill artemis")
+				r.logger.WithError(err).Error("could not kill artemis")
 			}
 		}) {
 		}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto/internal/leto"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
 )
 
@@ -187,7 +188,7 @@ func NewVideoManager(basedir string, fps float64, config leto.StreamConfiguratio
 	}
 	res := &videoTask{
 		config: conf,
-		logger: NewLogger("video"),
+		logger: tm.NewLogger("video"),
 	}
 	if err := res.Check(); err != nil {
 		return nil, err

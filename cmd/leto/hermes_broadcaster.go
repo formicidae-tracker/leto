@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -100,7 +101,7 @@ func (h *hermesBroadcaster) unregister(id int) {
 }
 
 func (h *hermesBroadcaster) onAccept(ctx context.Context, conn net.Conn) {
-	logger := NewLogger(fmt.Sprintf("broadcast/%s", conn.RemoteAddr()))
+	logger := tm.NewLogger(fmt.Sprintf("broadcast/%s", conn.RemoteAddr()))
 	defer func() {
 		if err := conn.Close(); err != nil {
 			logger.Printf("could not close connection: %s", err)
