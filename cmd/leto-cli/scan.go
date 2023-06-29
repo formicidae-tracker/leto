@@ -160,6 +160,9 @@ func (c *ScanCommand) printStatuses(now time.Time, statuses <-chan Result) {
 }
 
 func init() {
-	parser.AddCommand("scan", "scans local network for leto instances", "Uses zeroconf to discover available leto instances and their status over the network", scanCommand)
+	parser.AddCommand("scan",
+		"scans local network for leto instances",
+		"Uses mDNS/zeroconf to discover available leto instances and their status over the network",
+		scanCommand)
 
 }

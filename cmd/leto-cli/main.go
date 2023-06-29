@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 
 	"github.com/formicidae-tracker/leto/internal/leto"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/jessevdk/go-flags"
 )
 
@@ -45,7 +49,37 @@ var opts = &Options{}
 
 var parser = flags.NewParser(opts, flags.Default)
 
+func setUpLogger() {
+	var err error
+	defer func() {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not load telemetry config file: %s", err)
+		}
+	}()
+
+	content, err := ioutil.ReadFile(telemetryConfigPath())
+	if err != nil {
+		if err == os.ErrNotExist {
+			err = nil
+		} else {
+			err = fmt.Errorf("could not read telemetry config file: %w", err)
+		}
+		return
+	}
+
+	args := tm.OtelProviderArgs{}
+	err = json.Unmarshal(content, &args)
+	if err != nil {
+		return
+	}
+
+	tm.SetUpTelemetry(args)
+}
+
 func Execute() error {
+	setUpLogger()
+	defer tm.Shutdown(context.Background())
+
 	var err error
 	nodes, err = leto.NewNodeLister().ListNodes()
 	if err != nil {

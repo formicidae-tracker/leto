@@ -13,7 +13,9 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
+	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/grandcat/zeroconf"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
@@ -36,8 +38,7 @@ func (n Node) DialAddress() string {
 }
 
 func (n Node) Connect() (*grpc.ClientConn, letopb.LetoClient, error) {
-	conn, err := grpc.Dial(
-		n.DialAddress(),
+	options := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithConnectParams(
 			grpc.ConnectParams{
@@ -49,6 +50,18 @@ func (n Node) Connect() (*grpc.ClientConn, letopb.LetoClient, error) {
 					MaxDelay:   200 * time.Millisecond,
 				},
 			}),
+	}
+
+	if tm.Enabled() {
+		options = append(options,
+			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		)
+	}
+
+	conn, err := grpc.Dial(
+		n.DialAddress(),
+		options...,
 	)
 	if err != nil {
 		return nil, nil, err

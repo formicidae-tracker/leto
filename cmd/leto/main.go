@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -60,6 +61,7 @@ func execute() error {
 	}
 
 	setUpLogger(opts)
+	defer tm.Shutdown(context.Background())
 
 	return (&LetoGRPCWrapper{}).Run(opts.LetoConfig())
 }
