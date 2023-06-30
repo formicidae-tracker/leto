@@ -8,7 +8,7 @@ require (
 	github.com/atuleu/go-tablifier v0.2.1
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/formicidae-tracker/hermes v0.2.0
-	github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230629143026-739201cdbb7b
+	github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230630142356-dc67bd10fa58
 	github.com/gabriel-vasile/mimetype v1.4.2
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.3
@@ -27,7 +27,6 @@ require (
 
 require (
 	github.com/atuleu/go-lttb v0.0.0-20220928123602-2585f6369698 // indirect
-	github.com/barkimedes/go-deepcopy v0.0.0-20220514131651-17c30cfc62df // indirect
 	github.com/bshuster-repo/logrus-logstash-hook v1.1.0 // indirect
 	github.com/cenkalti/backoff v2.1.1+incompatible // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect

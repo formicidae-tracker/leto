@@ -46,8 +46,6 @@ github.com/atuleu/go-lttb v0.0.0-20220928123602-2585f6369698 h1:j5uPq/Ux+epk57On
 github.com/atuleu/go-lttb v0.0.0-20220928123602-2585f6369698/go.mod h1:KBPzsycKi2NVN2wRyQdFfmMd1VUClpT5ddUPeBUoUlM=
 github.com/atuleu/go-tablifier v0.2.1 h1:uGZsDnVoTp9Ggv1ugPqMGIN9wO8bWyW+qX7ZC+f/ZPI=
 github.com/atuleu/go-tablifier v0.2.1/go.mod h1:iE0RL4hD1aJ1Q4aq8yaW/vFVqnZT5CBBbyJCI6C7idY=
-github.com/barkimedes/go-deepcopy v0.0.0-20220514131651-17c30cfc62df h1:GSoSVRLoBaFpOOds6QyY1L8AX7uoY+Ln3BHc22W40X0=
-github.com/barkimedes/go-deepcopy v0.0.0-20220514131651-17c30cfc62df/go.mod h1:hiVxq5OP2bUGBRNS3Z/bt/reCLFNbdcST6gISi1fiOM=
 github.com/blang/semver v3.5.1+incompatible h1:cQNTCjp13qL8KC3Nbxr/y2Bqb63oX6wdnnjpJbkM4JQ=
 github.com/blang/semver v3.5.1+incompatible/go.mod h1:kRBLl5iJ+tD4TcOOxsy/0fnwebNt5EWlYSAyrTnjyyk=
 github.com/bshuster-repo/logrus-logstash-hook v1.1.0 h1:o2FzZifLg+z/DN1OFmzTWzZZx/roaqt8IPZCIVco8r4=
@@ -87,8 +85,8 @@ github.com/firstrow/goautosocket v0.0.0-20161106110228-ac6bb839dc77 h1:oiItVOI1Q
 github.com/firstrow/goautosocket v0.0.0-20161106110228-ac6bb839dc77/go.mod h1:su9ce3/1fTb5o8Y8k8r1clyCtFNwr+BlX+Nnf0qV6g4=
 github.com/formicidae-tracker/hermes v0.2.0 h1:NVY/okcA9QAaOZQ1gVS5QWBhUaFT3j9KIUiQ+ovefyA=
 github.com/formicidae-tracker/hermes v0.2.0/go.mod h1:JIRU3fD0IbqIHjNCvfVl9EWO7OviEIiDIMY/3Tg+/Jk=
-github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230629143026-739201cdbb7b h1:as3YMf1AryE90cRXU7e/Q4UEy0Ew2itAESOpc0doSpc=
-github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230629143026-739201cdbb7b/go.mod h1:xncYdE+SgQlYjGKXEyCKZoAF9LJBme/4hQJDjNNOGMg=
+github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230630142356-dc67bd10fa58 h1:DYIx0CTfWeC1VmiyuCcj28hkAi5+kd4EE5Rx0EI4M2I=
+github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230630142356-dc67bd10fa58/go.mod h1:+mrUQS4CkPzPZFN9X6CG5WsXScJLdCF/SzmiZfOYQ1E=
 github.com/gabriel-vasile/mimetype v1.4.2 h1:w5qFW6JKBz9Y393Y4q372O9A7cUSequkh1Q7OhCmWKU=
 github.com/gabriel-vasile/mimetype v1.4.2/go.mod h1:zApsH/mKG4w07erKIaJPFiX0Tsq9BFQgN3qGY5GnNgA=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
