@@ -19,6 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -39,14 +40,17 @@ type Leto struct {
 
 	logger *logrus.Entry
 	tracer trace.Tracer
+	meter  metric.Meter
 }
+
+var instrumentationName string = "github.com/formicidae-tracker/leto/cmd/leto"
 
 func NewLeto(config leto.Config) (*Leto, error) {
 	l := &Leto{
 		leto:   config,
 		node:   GetNodeConfiguration(),
 		logger: tm.NewLogger("leto"),
-		tracer: otel.Tracer("github.com/formicidae-tracker/leto/cmd/leto"),
+		tracer: otel.Tracer(instrumentationName),
 	}
 	l.runnerCond = sync.NewCond(&l.mx)
 	if err := l.check(); err != nil {

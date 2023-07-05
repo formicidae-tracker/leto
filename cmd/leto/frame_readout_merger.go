@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/formicidae-tracker/hermes"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type synchronizationPoint struct {
@@ -130,6 +134,28 @@ func (r ReadoutBuffer) Less(i, j int) bool {
 
 func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout, outbound chan<- *hermes.FrameReadout) error {
 	defer close(outbound)
+	logger := tm.NewLogger("frame-merger").WithContext(ctx)
+
+	var frameTracked, frameTimeouted, frameDropped atomic.Int64
+	meter := otel.Meter(instrumentationName)
+	counters := map[string]*atomic.Int64{
+		"frameTracked":   &frameTracked,
+		"frameTimeouted": &frameTimeouted,
+		"frameDropped":   &frameDropped,
+	}
+	for name := range counters {
+		// note: we should capture the right pointer
+		counter := counters[name]
+		counter.Store(0)
+		meter.Int64ObservableCounter(name,
+			metric.WithInt64Callback(func(_ context.Context,
+				obs metric.Int64Observer) error {
+
+				obs.Observe(counter.Load())
+				return nil
+			}),
+		)
+	}
 
 	if err := wb.Check(); err != nil {
 		return err
@@ -143,7 +169,6 @@ func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan 
 	betweenFrame := time.Duration(1.0e9/wb.FPS) * time.Nanosecond
 	timeout := time.Duration(2*wb.Stride+2) * betweenFrame
 
-	logger := tm.NewLogger("frame-merger")
 	for {
 		var timer *time.Timer = nil
 		var timeoutC <-chan time.Time = nil
@@ -165,7 +190,7 @@ func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan 
 
 			_, err := wb.CheckFrame(frame)
 			if err != nil {
-				logger.Printf("%s", err)
+				logger.WithError(err).Error("workbalance error")
 				continue
 			}
 			now = time.Now()
@@ -177,7 +202,8 @@ func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan 
 			}
 			if frame.FrameID < nextFrameToSend {
 				//we already timeouted the frame
-				logger.Printf("received frame %d, but already sent a timeout", frame.FrameID)
+				logger.WithField("frameID", frame.FrameID).
+					Warn("timeout already sent")
 				continue
 			}
 			delete(deadlines, frame.FrameID)
@@ -202,7 +228,8 @@ func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan 
 			//log.Printf("testing %d now:%s deadline:%s ok:%v", i, now, d, ok)
 			if ok == true && now.After(d) == true {
 				nowPb, _ := ptypes.TimestampProto(now)
-				logger.Printf("marking frame %d as timeouted", i)
+				frameTimeouted.Add(1)
+				logger.WithField("frameID", i).Warn("marking frame as timeouted")
 				ro := &hermes.FrameReadout{
 					Error:   hermes.FrameReadout_PROCESS_TIMEOUT,
 					FrameID: i,
@@ -219,7 +246,10 @@ func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan 
 		//send all frames that we have received or timeouted
 		for len(buffer) > 0 {
 			if buffer[0].FrameID < nextFrameToSend {
-				logger.Printf("inconsistent state, next frame is %d, and has %d buffered", nextFrameToSend, buffer[0].FrameID)
+				logger.WithFields(logrus.Fields{
+					"nextFrameID": nextFrameToSend,
+					"bufferedID":  buffer[0].FrameID,
+				}).Error("inconsistent buffer state")
 				buffer = buffer[1:]
 				continue
 			}
@@ -228,6 +258,12 @@ func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan 
 				break
 			}
 			buffer[0].ProducerUuid = ""
+			if buffer[0].Error != hermes.FrameReadout_NO_ERROR {
+				frameDropped.Add(1)
+			} else {
+				frameTracked.Add(1)
+			}
+
 			outbound <- buffer[0]
 			buffer = buffer[1:]
 			delete(deadlines, nextFrameToSend)

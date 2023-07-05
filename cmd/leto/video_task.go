@@ -11,10 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 var ffmpegCommandName = "ffmpeg"
@@ -180,6 +184,7 @@ type videoTask struct {
 	frameCorrespondance *os.File
 
 	logger *logrus.Entry
+	meter  metric.Meter
 }
 
 func NewVideoManager(ctx context.Context, basedir string, fps float64, config leto.StreamConfiguration) (VideoTask, error) {
@@ -190,6 +195,7 @@ func NewVideoManager(ctx context.Context, basedir string, fps float64, config le
 	res := &videoTask{
 		config: conf,
 		logger: tm.NewLogger("video").WithContext(ctx),
+		meter:  otel.Meter(instrumentationName),
 	}
 	if err := res.Check(); err != nil {
 		return nil, err
@@ -422,6 +428,24 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 		s.waitTasks()
 	}()
 
+	var frameExported, frameDropped atomic.Int64
+	counters := map[string]*atomic.Int64{
+		"videoFrameExported": &frameExported,
+		"videoFrameDropped":  &frameDropped,
+	}
+	for name := range counters {
+		counter := counters[name]
+		counter.Store(0)
+		s.meter.Int64ObservableCounter(name,
+			metric.WithInt64Callback(func(_ context.Context,
+				obs metric.Int64Observer) error {
+
+				obs.Observe(counter.Load())
+				return nil
+			}),
+		)
+	}
+
 	header := make([]byte, 3*8)
 
 	currentFrame := 0
@@ -431,6 +455,8 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 	maxHeaderTrials := 1920 * 1024 * 3 * 30
 	frameWriteError := 0
 	maxFrameRetries := 3
+	initialized := false
+	var lastFrameExported uint64 = 0
 	for {
 		_, err := io.ReadFull(muxed, header)
 		if err != nil {
@@ -456,6 +482,13 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 		actual := binary.LittleEndian.Uint64(header)
 		width := binary.LittleEndian.Uint64(header[8:])
 		height := binary.LittleEndian.Uint64(header[16:])
+
+		frameExported.Add(1)
+		if initialized == true {
+			frameDropped.Add(int64(actual - lastFrameExported - 1))
+		}
+		lastFrameExported = actual
+		initialized = true
 
 		if len(s.config.resolution) == 0 {
 			s.config.resolution = fmt.Sprintf("%dx%d", width, height)
