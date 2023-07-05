@@ -11,6 +11,7 @@ import (
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/jessevdk/go-flags"
+	"github.com/sirupsen/logrus"
 )
 
 type Options struct {
@@ -53,13 +54,13 @@ func setUpLogger() {
 	var err error
 	defer func() {
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "could not load telemetry config file: %s", err)
+			logrus.WithError(err).Error("could not load telemetry config file")
 		}
 	}()
 
 	content, err := ioutil.ReadFile(telemetryConfigPath())
 	if err != nil {
-		if err == os.ErrNotExist {
+		if os.IsNotExist(err) == true {
 			err = nil
 		} else {
 			err = fmt.Errorf("could not read telemetry config file: %w", err)
@@ -72,6 +73,7 @@ func setUpLogger() {
 	if err != nil {
 		return
 	}
+	args.ForceFlushOnShutdown = true
 
 	tm.SetUpTelemetry(args)
 }

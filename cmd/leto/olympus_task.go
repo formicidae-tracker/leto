@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/formicidae-tracker/olympus/pkg/api"
 	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
@@ -27,7 +28,7 @@ type statusAndAlarm struct {
 }
 
 type olympusTask struct {
-	*olympuspb.ClientTask[olympuspb.TrackingUpStream, olympuspb.TrackingDownStream]
+	*olympuspb.ClientTask[*olympuspb.TrackingUpStream, *olympuspb.TrackingDownStream]
 
 	incoming chan statusAndAlarm
 	logger   *logrus.Entry
@@ -55,17 +56,28 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 	if tm.Enabled() {
 		options = append(options,
 			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 		)
 	}
 
 	address := fmt.Sprintf("%s:%d", *target, env.Leto.OlympusPort)
-	return &olympusTask{
+	res := &olympusTask{
 		ClientTask: olympuspb.NewTrackingTask(
-			ctx, address, declaration, options...),
+			ctx, address, declaration, api.WithDialOptions(options...)),
 		incoming: incoming,
 		logger:   tm.NewLogger("olympus-registration").WithContext(ctx),
-	}, nil
+	}
+
+	go func() {
+		for connection := range res.ClientTask.Confirmations() {
+			if connection.Error != nil {
+				res.logger.WithError(connection.Error).Error("connection error")
+			} else {
+				res.logger.Info("connected")
+			}
+		}
+	}()
+
+	return res, nil
 }
 
 func (t *olympusTask) PushDiskStatus(status *olympuspb.DiskStatus, update *olympuspb.AlarmUpdate) {

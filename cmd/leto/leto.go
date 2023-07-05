@@ -181,8 +181,12 @@ func (l *Leto) start(ctx context.Context, user *leto.TrackingConfiguration) (err
 	if l.isStarted() == true {
 		return errors.New("already started")
 	}
-	ctx, l.cancel = context.WithCancel(ctx)
-	l.env, err = NewExperimentConfiguration(ctx, l.leto, l.node, user)
+	var expctx context.Context
+	expctx, l.cancel = context.WithCancel(context.Background())
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() == true {
+		expctx = trace.ContextWithSpanContext(expctx, sc)
+	}
+	l.env, err = NewExperimentConfiguration(expctx, l.leto, l.node, user)
 	if err != nil {
 		return err
 	}
@@ -191,7 +195,7 @@ func (l *Leto) start(ctx context.Context, user *leto.TrackingConfiguration) (err
 		return err
 	}
 
-	logger := l.experimentLogger(ctx, l.env.Config)
+	logger := l.experimentLogger(expctx, l.env.Config)
 
 	go func() {
 		logger.Info("starting experiment")

@@ -6,19 +6,20 @@ services:
       context: .
     hostname: leto-dev
     extra_hosts:
-      - olympus-dev:host-gateway
+      - olympus-dev.local:host-gateway
       - signoz:host-gateway
     devices:
       - /dev/dri/card0
+    ipc: host
     volumes:
       - ./frames:/data
       - /tmp/.X11-unix:/tmp/.X11-unix
       - $HOME/.Xauthority:/home/fort-user/.Xauthority
     command:
       - --dev
+      - -vv
     environment:
       - DISPLAY
-      - LETO_LOGSTASH_ENDPOINT=signoz:3333
       - LETO_OTEL_ENDPOINT=signoz:4317
     ports:
       - "4000:4000" # gRPC

@@ -339,7 +339,7 @@ func (s *videoTask) startTasks() error {
 		if err != nil {
 			s.logger.Printf("could not tranfer data between tasks: %s", err)
 		}
-		s.logger.Printf("written %s", humanize.ByteSize(n))
+		s.logger.WithField("bytes", n).Infof("copied  %s", humanize.ByteSize(n))
 	}()
 
 	if len(s.config.destAddress) > 0 {
@@ -491,7 +491,7 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 			s.stopTasks()
 			s.waitTasks()
 
-			s.logger.Printf("written %d frames", currentFrame)
+			s.logger.WithField("frames", currentFrame).Info("frame written")
 		}
 	}
 
