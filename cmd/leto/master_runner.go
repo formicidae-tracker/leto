@@ -13,6 +13,7 @@ import (
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/constraints"
 )
 
@@ -40,7 +41,14 @@ type masterRunner struct {
 
 func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	trackerCtx, cancelTracker := context.WithCancel(env.Context)
+
 	otherCtx, cancelOther := context.WithCancel(context.Background())
+
+	// inject potential spanContext in otherCtx
+	if sc := trace.SpanContextFromContext(env.Context); sc.IsValid() == true {
+		otherCtx = trace.ContextWithSpanContext(otherCtx, sc)
+	}
+
 	res := &masterRunner{
 		env:                env,
 		subtasks:           make(map[string]<-chan error),
@@ -48,7 +56,7 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		otherCtx:           otherCtx,
 		cancelLocalTracker: cancelTracker,
 		cancelOthers:       cancelOther,
-		logger:             tm.NewLogger("runner"),
+		logger:             tm.NewLogger("runner").WithContext(env.Context),
 		artemisStarted:     make(chan struct{}),
 	}
 	if err := res.SetUp(); err != nil {
@@ -73,14 +81,14 @@ func (r *masterRunner) SetUp() error {
 		return err
 	}
 
-	r.fileWriter, err = NewFrameReadoutWriter(r.env.Path("tracking.hermes"))
+	r.fileWriter, err = NewFrameReadoutWriter(r.otherCtx, r.env.Path("tracking.hermes"))
 	if err != nil {
 		return err
 	}
 
 	r.dispatcher = NewFrameDispatcher(r.fileWriter.Incoming(), r.hermesBroadcaster.Incoming())
 
-	r.video, err = NewVideoManager(r.env.ExperimentDir, *r.env.Config.Camera.FPS, r.env.Config.Stream)
+	r.video, err = NewVideoManager(r.otherCtx, r.env.ExperimentDir, *r.env.Config.Camera.FPS, r.env.Config.Stream)
 	if err != nil {
 		return err
 	}

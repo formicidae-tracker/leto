@@ -2,6 +2,7 @@ package main
 
 import (
 	"compress/gzip"
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -65,11 +66,11 @@ func (s *LetoSuite) SetUpTest(c *C) {
 }
 
 func (s *LetoSuite) TearDownTest(c *C) {
-	s.l.Stop()
+	s.l.Stop(context.Background())
 }
 
 func (s *LetoSuite) TestAlreadyStopped(c *C) {
-	c.Check(s.l.Stop(), ErrorMatches, "already stopped")
+	c.Check(s.l.Stop(context.Background()), ErrorMatches, "already stopped")
 }
 
 // connects to the boradcaster and wait for n frame to be received
@@ -104,12 +105,12 @@ func (s *LetoSuite) TestTestMode(c *C) {
 		},
 	}
 
-	c.Assert(s.l.Start(conf), IsNil)
-	c.Assert(s.l.Start(&leto.TrackingConfiguration{}), ErrorMatches, "already started")
+	c.Assert(s.l.Start(context.Background(), conf), IsNil)
+	c.Assert(s.l.Start(context.Background(), &leto.TrackingConfiguration{}), ErrorMatches, "already started")
 
 	c.Check(s.waitFrames(15), IsNil)
 
-	c.Check(s.l.Stop(), IsNil)
+	c.Check(s.l.Stop(context.Background()), IsNil)
 	log := s.l.LastExperimentLog()
 	c.Assert(log, Not(IsNil))
 	c.Check(log.HasError, Equals, false)
@@ -167,11 +168,11 @@ func (s *LetoSuite) TestE2E(c *C) {
 
 	c.Check(s.l.LastExperimentLog(), IsNil)
 
-	c.Assert(s.l.Start(conf), IsNil)
+	c.Assert(s.l.Start(context.Background(), conf), IsNil)
 
 	c.Check(s.waitFrames(15), IsNil)
 
-	c.Check(s.l.Stop(), IsNil)
+	c.Check(s.l.Stop(context.Background()), IsNil)
 	log := s.l.LastExperimentLog()
 	c.Assert(log, Not(IsNil))
 	c.Check(log.HasError, Equals, false)
@@ -203,7 +204,7 @@ func (s *LetoSuite) TestArtemisFailure(c *C) {
 		},
 	}
 
-	c.Assert(s.l.Start(conf), IsNil)
+	c.Assert(s.l.Start(context.Background(), conf), IsNil)
 	time.Sleep(20 * time.Millisecond)
 	log := s.l.LastExperimentLog()
 	c.Assert(log, Not(IsNil))

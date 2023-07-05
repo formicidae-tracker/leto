@@ -64,7 +64,7 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 		ClientTask: olympuspb.NewTrackingTask(
 			ctx, address, declaration, options...),
 		incoming: incoming,
-		logger:   tm.NewLogger("olympus-registration"),
+		logger:   tm.NewLogger("olympus-registration").WithContext(ctx),
 	}, nil
 }
 

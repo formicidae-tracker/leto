@@ -24,7 +24,7 @@ type LetoGRPCWrapper struct {
 	logger *logrus.Entry
 }
 
-func (l *LetoGRPCWrapper) StartTracking(c context.Context, request *letopb.StartRequest) (*letopb.Empty, error) {
+func (l *LetoGRPCWrapper) StartTracking(ctx context.Context, request *letopb.StartRequest) (*letopb.Empty, error) {
 	config, err := leto.ParseConfiguration([]byte(request.YamlConfiguration))
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "could not parse configuration: %s", err)
@@ -32,25 +32,25 @@ func (l *LetoGRPCWrapper) StartTracking(c context.Context, request *letopb.Start
 
 	l.logger.WithField("experiment", config.ExperimentName).Info("new start request")
 
-	err = l.leto.Start(config)
+	err = l.leto.Start(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 	return &letopb.Empty{}, nil
 }
 
-func (l *LetoGRPCWrapper) StopTracking(context.Context, *letopb.Empty) (*letopb.Empty, error) {
+func (l *LetoGRPCWrapper) StopTracking(ctx context.Context, _ *letopb.Empty) (*letopb.Empty, error) {
 	l.logger.Infof("new stop request")
-	err := l.leto.Stop()
+	err := l.leto.Stop(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &letopb.Empty{}, nil
 }
 
-func (l *LetoGRPCWrapper) GetStatus(context.Context, *letopb.Empty) (*letopb.Status, error) {
+func (l *LetoGRPCWrapper) GetStatus(ctx context.Context, _ *letopb.Empty) (*letopb.Status, error) {
 	l.logger.Trace("get status")
-	return l.leto.Status(), nil
+	return l.leto.Status(ctx), nil
 }
 
 func (l *LetoGRPCWrapper) GetLastExperimentLog(context.Context, *letopb.Empty) (*letopb.ExperimentLog, error) {
@@ -91,14 +91,14 @@ func (l *LetoGRPCWrapper) getSlave(name string) (leto.Node, error) {
 	return slave, nil
 }
 
-func (l *LetoGRPCWrapper) Link(c context.Context, link *letopb.TrackingLink) (*letopb.Empty, error) {
+func (l *LetoGRPCWrapper) Link(ctx context.Context, link *letopb.TrackingLink) (*letopb.Empty, error) {
 	hostname, err := l.checkTrackingLink(link)
 	if err != nil {
 		return nil, err
 	}
 
 	if link.Slave == hostname {
-		if err := l.leto.SetMaster(link.Master); err != nil {
+		if err := l.leto.SetMaster(ctx, link.Master); err != nil {
 			return nil, err
 		}
 		return &letopb.Empty{}, nil
@@ -114,7 +114,7 @@ func (l *LetoGRPCWrapper) Link(c context.Context, link *letopb.TrackingLink) (*l
 		return nil, err
 	}
 
-	err = l.leto.AddSlave(link.Slave)
+	err = l.leto.AddSlave(ctx, link.Slave)
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +122,13 @@ func (l *LetoGRPCWrapper) Link(c context.Context, link *letopb.TrackingLink) (*l
 	return &letopb.Empty{}, nil
 }
 
-func (l *LetoGRPCWrapper) Unlink(c context.Context, link *letopb.TrackingLink) (*letopb.Empty, error) {
+func (l *LetoGRPCWrapper) Unlink(ctx context.Context, link *letopb.TrackingLink) (*letopb.Empty, error) {
 	hostname, err := l.checkTrackingLink(link)
 	if err != nil {
 		return nil, err
 	}
 	if link.Slave == hostname {
-		err := l.leto.SetMaster("")
+		err := l.leto.SetMaster(ctx, "")
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func (l *LetoGRPCWrapper) Unlink(c context.Context, link *letopb.TrackingLink) (
 		return nil, err
 	}
 
-	err = l.leto.RemoveSlave(link.Slave)
+	err = l.leto.RemoveSlave(ctx, link.Slave)
 	if err != nil {
 		return nil, err
 	}

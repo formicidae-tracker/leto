@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ func (s *FileWriterSuite) TearDownSuite(c *C) {
 
 func (s *FileWriterSuite) SetUpTest(c *C) {
 	var err error
-	s.writer, err = NewFrameReadoutWriter(filepath.Join(s.basedir, c.TestName()+".hermes"))
+	s.writer, err = NewFrameReadoutWriter(context.Background(), filepath.Join(s.basedir, c.TestName()+".hermes"))
 	c.Assert(err, IsNil)
 	s.writer.(*hermesFileWriter).period = 5 * time.Millisecond
 	s.err = Start(s.writer)

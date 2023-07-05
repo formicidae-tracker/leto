@@ -17,6 +17,9 @@ import (
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v2"
@@ -35,6 +38,7 @@ type Leto struct {
 	lastExperimentLog *letopb.ExperimentLog
 
 	logger *logrus.Entry
+	tracer trace.Tracer
 }
 
 func NewLeto(config leto.Config) (*Leto, error) {
@@ -42,6 +46,7 @@ func NewLeto(config leto.Config) (*Leto, error) {
 		leto:   config,
 		node:   GetNodeConfiguration(),
 		logger: tm.NewLogger("leto"),
+		tracer: otel.Tracer("github.com/formicidae-tracker/leto/cmd/leto"),
 	}
 	l.runnerCond = sync.NewCond(&l.mx)
 	if err := l.check(); err != nil {
@@ -94,19 +99,22 @@ func (l *Leto) checkFirmwareVariant() error {
 	return getAndCheckFirmwareVariant(l.node)
 }
 
-func (l *Leto) Status() *letopb.Status {
+func (l *Leto) Status(ctx context.Context) *letopb.Status {
+	ctx, span := l.tracer.Start(ctx, "Status")
+	defer span.End()
 	l.mx.Lock()
 	defer l.mx.Unlock()
-	return l.status()
+
+	return l.status(ctx)
 }
 
-func (l *Leto) status() *letopb.Status {
+func (l *Leto) status(ctx context.Context) *letopb.Status {
 	res := &letopb.Status{
 		Master:     l.node.Master,
 		Slaves:     l.node.Slaves,
 		Experiment: nil,
 	}
-	defer l.addDiskInfoToStatus(res)
+	defer l.addDiskInfoToStatus(ctx, res)
 
 	if l.env == nil {
 		return res
@@ -115,6 +123,7 @@ func (l *Leto) status() *letopb.Status {
 	yamlConfig, err := l.env.Config.Yaml()
 	if err != nil {
 		yamlConfig = []byte(fmt.Sprintf("could not generate yaml config: %s", err))
+		l.logger.WithContext(ctx).WithError(err).Error("could not generate yaml config")
 	}
 	res.Experiment = &letopb.ExperimentStatus{
 		ExperimentDir:     filepath.Base(l.env.ExperimentDir),
@@ -124,11 +133,13 @@ func (l *Leto) status() *letopb.Status {
 	return res
 }
 
-func (l *Leto) addDiskInfoToStatus(status *letopb.Status) {
+func (l *Leto) addDiskInfoToStatus(ctx context.Context, status *letopb.Status) {
 	var err error
 	defer func() {
 		if err != nil {
-			l.logger.WithError(err).Errorf("could not get available disk space")
+			l.logger.WithContext(ctx).
+				WithError(err).
+				Errorf("could not get available disk space")
 		}
 	}()
 
@@ -145,18 +156,32 @@ func (l *Leto) LastExperimentLog() *letopb.ExperimentLog {
 	return l.lastExperimentLog
 }
 
-func (l *Leto) Start(user *leto.TrackingConfiguration) error {
-	l.mx.Lock()
-	defer l.mx.Unlock()
-	return l.start(user)
+func endSpan(span trace.Span, err error) {
+	if err != nil {
+		span.SetStatus(codes.Error, "leto error")
+		span.RecordError(err)
+	}
+	span.End()
 }
 
-func (l *Leto) start(user *leto.TrackingConfiguration) (err error) {
+func (l *Leto) Start(ctx context.Context, user *leto.TrackingConfiguration) (err error) {
+	ctx, span := l.tracer.Start(ctx, "Start")
+	defer func() { endSpan(span, err) }()
+
+	l.mx.Lock()
+	defer l.mx.Unlock()
+	return l.start(ctx, user)
+}
+
+func (l *Leto) experimentLogger(ctx context.Context, config *leto.TrackingConfiguration) *logrus.Entry {
+	return l.logger.WithContext(ctx).WithField("experiment", config.ExperimentName)
+}
+
+func (l *Leto) start(ctx context.Context, user *leto.TrackingConfiguration) (err error) {
 	if l.isStarted() == true {
 		return errors.New("already started")
 	}
-	var ctx context.Context
-	ctx, l.cancel = context.WithCancel(context.Background())
+	ctx, l.cancel = context.WithCancel(ctx)
 	l.env, err = NewExperimentConfiguration(ctx, l.leto, l.node, user)
 	if err != nil {
 		return err
@@ -166,9 +191,10 @@ func (l *Leto) start(user *leto.TrackingConfiguration) (err error) {
 		return err
 	}
 
+	logger := l.experimentLogger(ctx, l.env.Config)
+
 	go func() {
-		l.logger.WithField("experiment",
-			l.env.Config.ExperimentName).Infof("starting experiment")
+		logger.Info("starting experiment")
 		log, err := runner.Run()
 		if err != nil {
 			l.logger.WithError(err).Error("experiment failed")
@@ -186,18 +212,20 @@ func (l *Leto) start(user *leto.TrackingConfiguration) (err error) {
 	return nil
 }
 
-func (l *Leto) Stop() error {
+func (l *Leto) Stop(ctx context.Context) (err error) {
+	ctx, span := l.tracer.Start(ctx, "Stop")
+	defer func() { endSpan(span, err) }()
+
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
 	if l.isStarted() == false {
 		return errors.New("already stopped")
 	}
-	l.logger.WithField("experiment",
-		l.env.Config.ExperimentName).Info("stopping experiment")
+	logger := l.experimentLogger(ctx, l.env.Config)
+	logger.Info("stopping experiment")
 	l.cancel()
 
-	// to avoid a deadlock, we must unlo
 	for l.env != nil {
 		l.runnerCond.Wait()
 	}
@@ -205,7 +233,10 @@ func (l *Leto) Stop() error {
 	return nil
 }
 
-func (l *Leto) SetMaster(hostname string) error {
+func (l *Leto) SetMaster(ctx context.Context, hostname string) (err error) {
+	_, span := l.tracer.Start(ctx, "SetMaster")
+	defer func() { endSpan(span, err) }()
+
 	l.mx.Lock()
 	defer l.mx.Unlock()
 	if l.isStarted() == true {
@@ -238,7 +269,10 @@ func (l *Leto) setMaster(hostname string) (err error) {
 	return
 }
 
-func (l *Leto) AddSlave(hostname string) (err error) {
+func (l *Leto) AddSlave(ctx context.Context, hostname string) (err error) {
+	_, span := l.tracer.Start(ctx, "AddSlave")
+	defer func() { endSpan(span, err) }()
+
 	l.mx.Lock()
 	defer l.mx.Unlock()
 	if l.isStarted() == true {
@@ -268,7 +302,10 @@ func (l *Leto) addSlave(hostname string) (err error) {
 	return
 }
 
-func (l *Leto) RemoveSlave(hostname string) (err error) {
+func (l *Leto) RemoveSlave(ctx context.Context, hostname string) (err error) {
+	_, span := l.tracer.Start(ctx, "RemoveSlave")
+	defer func() { endSpan(span, err) }()
+
 	l.mx.Lock()
 	defer l.mx.Unlock()
 	if l.isStarted() == true {
@@ -349,7 +386,7 @@ func (l *Leto) LoadFromPersistentFile() {
 		return
 	}
 	logger.Info("restarting experiment from persistent file")
-	err = l.Start(config)
+	err = l.Start(context.Background(), config)
 	if err != nil {
 		logger.WithError(err).Error("could not restart experiment from persistent file")
 	}

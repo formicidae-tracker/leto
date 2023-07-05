@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/formicidae-tracker/hermes"
-	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/proto"
 )
 
@@ -101,34 +99,34 @@ func (h *hermesBroadcaster) unregister(id int) {
 }
 
 func (h *hermesBroadcaster) onAccept(ctx context.Context, conn net.Conn) {
-	logger := tm.NewLogger(fmt.Sprintf("broadcast/%s", conn.RemoteAddr()))
+	logger := h.server.logger.WithField("address", conn.RemoteAddr())
 	defer func() {
 		if err := conn.Close(); err != nil {
-			logger.Printf("could not close connection: %s", err)
+			logger.WithError(err).Error("could not close connection")
 		}
 	}()
 
 	if err := h.writeHeader(conn); err != nil {
-		logger.Printf("could not write header: %s", err)
+		logger.WithError(err).Error("could not write header")
 		return
 	}
 
 	id, outgoing := h.registerNew()
 	defer h.unregister(id)
 
-	logger.Printf("started data stream")
+	logger.Info("started data stream")
 
 	for data := range outgoing {
 		conn.SetDeadline(time.Now().Add(h.idle))
 		_, err := conn.Write(data)
 		if err != nil {
-			logger.Printf("could not write data: %s", err)
-			logger.Printf("stopping stream early")
+			logger.WithError(err).Error("could not write data")
+			logger.Warn("stopping stream early")
 			return
 		}
 	}
 
-	logger.Println("stopping stream")
+	logger.Info("stopping stream")
 
 }
 

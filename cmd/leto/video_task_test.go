@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -88,7 +89,7 @@ func (s *VideoTaskSuite) TestE2E(c *C) {
 	dir := filepath.Join(s.Basedir(), "e2e")
 	c.Assert(os.MkdirAll(dir, 0755), IsNil)
 
-	v, err := NewVideoManager(dir, 8.0, streamConfiguration)
+	v, err := NewVideoManager(context.Background(), dir, 8.0, streamConfiguration)
 	v.(*videoTask).config.period = 80 * time.Millisecond
 	c.Assert(err, IsNil)
 

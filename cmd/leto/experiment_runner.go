@@ -30,7 +30,7 @@ func NewExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 func newSlaveRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	res := &slaveRunner{
 		env:    env,
-		logger: tm.NewLogger("experiment-runner"),
+		logger: tm.NewLogger("experiment-runner").WithContext(env.Context),
 	}
 	var err error
 	res.artemisCmd, err = env.SetUp()

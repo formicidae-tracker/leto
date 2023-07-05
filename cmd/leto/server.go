@@ -26,7 +26,7 @@ type Server struct {
 }
 
 func NewServer(ctx context.Context, port int, domain string, grace time.Duration) (*Server, error) {
-	logger := tm.NewLogger(domain)
+	logger := tm.NewLogger(domain).WithContext(ctx)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {

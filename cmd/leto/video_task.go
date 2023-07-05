@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -181,14 +182,14 @@ type videoTask struct {
 	logger *logrus.Entry
 }
 
-func NewVideoManager(basedir string, fps float64, config leto.StreamConfiguration) (VideoTask, error) {
+func NewVideoManager(ctx context.Context, basedir string, fps float64, config leto.StreamConfiguration) (VideoTask, error) {
 	conf, err := newVideoTaskConfig(basedir, fps, config)
 	if err != nil {
 		return nil, err
 	}
 	res := &videoTask{
 		config: conf,
-		logger: tm.NewLogger("video"),
+		logger: tm.NewLogger("video").WithContext(ctx),
 	}
 	if err := res.Check(); err != nil {
 		return nil, err
