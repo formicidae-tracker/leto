@@ -60,6 +60,7 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 	}
 
 	address := fmt.Sprintf("%s:%d", *target, env.Leto.OlympusPort)
+
 	res := &olympusTask{
 		ClientTask: olympuspb.NewTrackingTask(
 			ctx, address, declaration, api.WithDialOptions(options...)),
