@@ -8,7 +8,7 @@ require (
 	github.com/atuleu/go-tablifier v0.2.1
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/formicidae-tracker/hermes v0.2.0
-	github.com/formicidae-tracker/olympus v0.5.0-dev.0.20230705194632-fa84e9cef9d9
+	github.com/formicidae-tracker/olympus v0.5.0
 	github.com/gabriel-vasile/mimetype v1.4.2
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.3
@@ -39,6 +39,8 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/miekg/dns v1.1.10 // indirect
+	github.com/mitchellh/copystructure v1.2.0 // indirect
+	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.16.0 // indirect
