@@ -8,7 +8,7 @@ require (
 	github.com/atuleu/go-tablifier v0.2.1
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/formicidae-tracker/hermes v0.2.0
-	github.com/formicidae-tracker/olympus v0.5.1
+	github.com/formicidae-tracker/olympus v0.5.2
 	github.com/gabriel-vasile/mimetype v1.4.2
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.3

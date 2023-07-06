@@ -20,6 +20,7 @@ import (
 type OlympusTask interface {
 	Task
 	PushDiskStatus(*olympuspb.DiskStatus, *olympuspb.AlarmUpdate)
+	Fatal(err error)
 }
 
 type statusAndAlarm struct {
@@ -101,4 +102,10 @@ func (t *olympusTask) PushDiskStatus(status *olympuspb.DiskStatus, update *olymp
 			t.logger.WithError(res.Error).Error("could not push update to olympus")
 		}
 	}()
+}
+
+func (t *olympusTask) Fatal(err error) {
+	if err != nil {
+		t.ClientTask.Fatal(err)
+	}
 }

@@ -112,12 +112,13 @@ func (r *masterRunner) SetUp() error {
 }
 
 func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
+	var errs []error
 	defer func() {
+		err = errors.Join(errs...)
 		var terr error
 		log, terr = r.env.TearDown(err)
-		if err == nil {
-			err = terr
-		}
+		errs = append(errs, terr)
+		err = errors.Join(errs...)
 	}()
 
 	r.startSubtasks()
@@ -142,13 +143,19 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 		}
 	}()
 
-	err = r.waitAnyCriticalSubtask()
+	werr := r.waitAnyCriticalSubtask()
+	errs = append(errs, werr)
+	if r.olympus != nil && werr != nil {
+		r.olympus.Fatal(werr)
+	}
 
 	r.stopLocalTracker()
 	lerr := r.waitForLocalTracker()
-	if err == nil {
-		err = lerr
+	errs = append(errs, lerr)
+	if r.olympus != nil && lerr != nil {
+		r.olympus.Fatal(lerr)
 	}
+
 	r.stopAllOtherSubtasks()
 	r.waitAllSubtasks()
 

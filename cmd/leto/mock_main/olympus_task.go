@@ -34,6 +34,18 @@ func (m *MockOlympusTask) EXPECT() *MockOlympusTaskMockRecorder {
 	return m.recorder
 }
 
+// Fatal mocks base method.
+func (m *MockOlympusTask) Fatal(err error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Fatal", err)
+}
+
+// Fatal indicates an expected call of Fatal.
+func (mr *MockOlympusTaskMockRecorder) Fatal(err interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fatal", reflect.TypeOf((*MockOlympusTask)(nil).Fatal), err)
+}
+
 // PushDiskStatus mocks base method.
 func (m *MockOlympusTask) PushDiskStatus(arg0 *api.DiskStatus, arg1 *api.AlarmUpdate) {
 	m.ctrl.T.Helper()
