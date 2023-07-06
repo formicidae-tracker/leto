@@ -4,10 +4,15 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"path"
 	"time"
+
+	"sync/atomic"
 
 	"github.com/atuleu/go-humanize"
 	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -22,7 +27,7 @@ func getDiskSize(path string) (free int64, total int64, err error) {
 		return 0, 0, fmt.Errorf("could not get available size for %s: %w", path, err)
 	}
 
-	return int64(stat.Bfree * uint64(stat.Bsize)), int64(stat.Blocks * uint64(stat.Bsize)), nil
+	return int64(stat.Bavail * uint64(stat.Bsize)), int64(stat.Blocks * uint64(stat.Bsize)), nil
 }
 
 type DiskWatcher interface {
@@ -35,15 +40,25 @@ type diskWatcher struct {
 	olympus OlympusTask
 	update  *olympuspb.AlarmUpdate
 	period  time.Duration
+
+	counter atomic.Int64
 }
 
 func NewDiskWatcher(ctx context.Context, env *TrackingEnvironment, olympus OlympusTask) DiskWatcher {
-	return &diskWatcher{
+	res := &diskWatcher{
 		env:     env,
 		ctx:     ctx,
 		olympus: olympus,
 		period:  5 * time.Second,
 	}
+	res.counter.Store(0)
+
+	otel.Meter(instrumentationName).
+		Int64ObservableUpDownCounter(path.Join("leto", "diskUsage"),
+			metric.WithInt64Callback(BuildAtomicInt64Callback(&res.counter)),
+		)
+
+	return res
 }
 
 func (w *diskWatcher) Run() error {
@@ -71,6 +86,8 @@ func (w *diskWatcher) pollDisk(now time.Time) error {
 		TotalBytes:     total,
 		BytesPerSecond: bps,
 	}
+
+	w.counter.Store(total - free)
 
 	if status.FreeBytes < w.env.Leto.DiskLimit {
 		return fmt.Errorf("unsufficient disk space: available: %s minimum: %s",

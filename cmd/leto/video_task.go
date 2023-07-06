@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -436,13 +437,8 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 	for name := range counters {
 		counter := counters[name]
 		counter.Store(0)
-		s.meter.Int64ObservableCounter(name,
-			metric.WithInt64Callback(func(_ context.Context,
-				obs metric.Int64Observer) error {
-
-				obs.Observe(counter.Load())
-				return nil
-			}),
+		s.meter.Int64ObservableCounter(path.Join("leto", name),
+			metric.WithInt64Callback(BuildAtomicInt64Callback(counter)),
 		)
 	}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -132,6 +133,15 @@ func (r ReadoutBuffer) Less(i, j int) bool {
 	return r[i].FrameID < r[j].FrameID
 }
 
+func BuildAtomicInt64Callback(v *atomic.Int64) metric.Int64Callback {
+	return func(_ context.Context, obs metric.Int64Observer) error {
+
+		obs.Observe(v.Load())
+
+		return nil
+	}
+}
+
 func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout, outbound chan<- *hermes.FrameReadout) error {
 	defer close(outbound)
 	logger := tm.NewLogger("frame-merger").WithContext(ctx)
@@ -147,13 +157,8 @@ func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan 
 		// note: we should capture the right pointer
 		counter := counters[name]
 		counter.Store(0)
-		meter.Int64ObservableCounter(name,
-			metric.WithInt64Callback(func(_ context.Context,
-				obs metric.Int64Observer) error {
-
-				obs.Observe(counter.Load())
-				return nil
-			}),
+		meter.Int64ObservableCounter(path.Join("leto", name),
+			metric.WithInt64Callback(BuildAtomicInt64Callback(counter)),
 		)
 	}
 
