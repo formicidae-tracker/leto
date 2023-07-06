@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -57,6 +58,8 @@ func NewLeto(config leto.Config) (*Leto, error) {
 		return nil, err
 	}
 
+	l.reportLoadAverage()
+
 	err := os.MkdirAll(xdg.DataHome, 0755)
 	if err != nil {
 		return nil, err
@@ -64,6 +67,25 @@ func NewLeto(config leto.Config) (*Leto, error) {
 
 	l.LoadFromPersistentFile()
 	return l, nil
+}
+
+func (l *Leto) reportLoadAverage() {
+	otel.Meter(instrumentationName).Float64ObservableGauge(
+		path.Join("leto", "loadAverage"),
+		metric.WithFloat64Callback(func(ctx context.Context, obs metric.Float64Observer) error {
+			content, err := ioutil.ReadFile("/proc/loadavg")
+			if err != nil {
+				return err
+			}
+			var load1Min float64
+			_, err = fmt.Sscanf(string(content), "%f", &load1Min)
+			if err != nil {
+				return fmt.Errorf("could not parse '/proc/loadavg' output: %s , error: %w", content, err)
+			}
+			obs.Observe(load1Min)
+
+			return nil
+		}))
 }
 
 func (l *Leto) check() error {
