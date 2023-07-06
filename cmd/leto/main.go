@@ -22,6 +22,7 @@ type Options struct {
 	Verbose      []bool `short:"v" long:"verbose" description:"Enable more verbose output (can be set multiple times)"`
 	RPCPort      *int   `long:"rpc-port" description:"Port to use for RPC incoming call"`
 	Devmode      bool   `long:"dev" description:"development mode to bypass some checks"`
+	DiskLimit    int64  `long:"disk-limit" description:"minimum space to leave on disk"`
 }
 
 func (o *Options) LetoConfig() leto.Config {
@@ -29,6 +30,10 @@ func (o *Options) LetoConfig() leto.Config {
 	if o.RPCPort != nil {
 		res.LetoPort = *o.RPCPort
 	}
+	if o.DiskLimit > 0 {
+		res.DiskLimit = o.DiskLimit
+	}
+
 	res.DevMode = o.Devmode
 	return res
 }
