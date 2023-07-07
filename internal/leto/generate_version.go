@@ -19,10 +19,17 @@ func main() {
 }
 
 func execute() error {
-	version, err := fetch_version_from_git()
-	if err != nil {
-		return err
+	var version string
+	if len(os.Args) > 1 && len(os.Args[1]) > 0 {
+		version = os.Args[1]
+	} else {
+		var err error
+		version, err = fetch_version_from_git()
+		if err != nil {
+			return err
+		}
 	}
+
 	fmt.Printf("LETO_VERSION:%s\n", version)
 	return write_version_file(version)
 }

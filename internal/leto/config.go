@@ -2,7 +2,7 @@ package leto
 
 import "time"
 
-//go:generate go run generate_version.go
+//go:generate go run generate_version.go $VERSION
 
 type Config struct {
 	LetoPort            int
