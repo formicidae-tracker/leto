@@ -75,6 +75,10 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 				res.logger.WithError(connection.Error).Error("connection error")
 			} else {
 				res.logger.Info("connected")
+				resp := <-res.ClientTask.Request(res.failureAlarm(nil))
+				if resp.Error != nil {
+					res.logger.WithError(resp.Error).Error("failure alarm off")
+				}
 			}
 		}
 	}()
@@ -106,6 +110,36 @@ func (t *olympusTask) PushDiskStatus(status *olympuspb.DiskStatus, update *olymp
 
 func (t *olympusTask) Fatal(err error) {
 	if err != nil {
+		resp := <-t.ClientTask.Request(t.failureAlarm(err))
+		if resp.Error != nil {
+			t.logger.WithError(resp.Error).Error("could not log failure to olympus")
+		}
 		t.ClientTask.Fatal(err)
+	}
+}
+
+func (t *olympusTask) failureAlarm(err error) *olympuspb.TrackingUpStream {
+	if err == nil {
+		return &olympuspb.TrackingUpStream{
+			Alarms: []*olympuspb.AlarmUpdate{
+				{
+					Identification: "tracking.failure",
+					Level:          olympuspb.AlarmLevel_FAILURE,
+					Status:         olympuspb.AlarmStatus_OFF,
+					Time:           timestamppb.Now(),
+				},
+			},
+		}
+	}
+	return &olympuspb.TrackingUpStream{
+		Alarms: []*olympuspb.AlarmUpdate{
+			{
+				Identification: "tracking.failure",
+				Level:          olympuspb.AlarmLevel_FAILURE,
+				Status:         olympuspb.AlarmStatus_ON,
+				Time:           timestamppb.Now(),
+				Description:    fmt.Sprintf("tracking failure: %s", err),
+			},
+		},
 	}
 }
