@@ -99,10 +99,11 @@ func (r *masterRunner) SetUp() error {
 	}
 
 	r.artemisCmd, err = r.env.SetUp()
-	r.artemisCmd.Stdout = r.artemisOut
 	if err != nil {
 		return err
 	}
+	r.artemisCmd.Stdout = r.artemisOut
+
 	r.olympus, err = NewOlympusTask(r.otherCtx, r.env)
 	if err != nil {
 		r.logger.WithError(err).Error("will not register to olympus")
