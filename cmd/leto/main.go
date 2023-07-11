@@ -30,7 +30,7 @@ func (o *Options) LetoConfig() leto.Config {
 	if o.RPCPort != nil {
 		res.LetoPort = *o.RPCPort
 	}
-	if o.DiskLimit > 0 {
+	if o.DiskLimit != 0 {
 		res.DiskLimit = o.DiskLimit
 	}
 

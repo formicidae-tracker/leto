@@ -70,7 +70,7 @@ func (s *DiskWatcherSuite) TestCanReadFs(c *C) {
 
 func (s *DiskWatcherSuite) TestWatcherFailsWhenLimitExceed(c *C) {
 	timeout := 300 * time.Millisecond
-	s.env.Leto.DiskLimit = s.env.Rate.freeStartBytes + 1000*1024
+	s.env.DiskLimit = s.env.Rate.freeStartBytes + 1000*1024
 	s.watcher.olympus = nil
 	errs := Start(s.watcher)
 	select {
@@ -129,7 +129,7 @@ func (s *DiskWatcherSuite) TestWatcherDoNotAlarmIfFarFromLimits(c *C) {
 		})
 
 	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
-	s.env.Leto.DiskLimit = computeDiskLimit(s.env.Rate.freeStartBytes, humanize.Day)
+	s.env.DiskLimit = computeDiskLimit(s.env.Rate.freeStartBytes, humanize.Day)
 	errs := Start(s.watcher)
 	<-sync
 	s.cancel()
@@ -139,7 +139,7 @@ func (s *DiskWatcherSuite) TestWatcherDoNotAlarmIfFarFromLimits(c *C) {
 }
 
 func (s *DiskWatcherSuite) TestWatcherWarnNearLimit(c *C) {
-	s.env.Leto.DiskLimit = 10 * 1024 * 1024 //10mB
+	s.env.DiskLimit = 10 * 1024 * 1024 //10mB
 	status := &olympuspb.DiskStatus{
 		FreeBytes:      20 * 1024 * 1024, // 20 MiB
 		TotalBytes:     40 * 1024 * 1024, // 40 MiB

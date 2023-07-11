@@ -89,9 +89,9 @@ func (w *diskWatcher) pollDisk(now time.Time) error {
 
 	w.counter.Store(total - free)
 
-	if status.FreeBytes < w.env.Leto.DiskLimit {
+	if status.FreeBytes < w.env.DiskLimit {
 		return fmt.Errorf("unsufficient disk space: available: %s minimum: %s",
-			humanize.ByteSize(status.FreeBytes), humanize.ByteSize(w.env.Leto.DiskLimit))
+			humanize.ByteSize(status.FreeBytes), humanize.ByteSize(w.env.DiskLimit))
 	}
 
 	if w.olympus == nil {
@@ -110,7 +110,7 @@ func (w *diskWatcher) computeETA(status *olympuspb.DiskStatus) time.Duration {
 		return math.MaxInt64
 	}
 
-	remaining := status.FreeBytes - w.env.Leto.DiskLimit
+	remaining := status.FreeBytes - w.env.DiskLimit
 
 	return time.Duration(float64(remaining) / float64(status.BytesPerSecond) * float64(time.Second))
 }

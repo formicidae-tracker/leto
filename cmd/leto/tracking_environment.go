@@ -33,6 +33,7 @@ type TrackingEnvironment struct {
 	Balancing     *WorkloadBalance
 	TestMode      bool
 	ExperimentDir string
+	DiskLimit     int64
 	Leto          leto.Config
 	Start         time.Time
 	Context       context.Context
@@ -175,6 +176,14 @@ func (e *TrackingEnvironment) computeExperimentDir() error {
 	return err
 }
 
+func (e *TrackingEnvironment) setDiskLimit(free int64) {
+	if e.Leto.DiskLimit > 0 {
+		e.DiskLimit = e.Leto.DiskLimit
+	} else {
+		e.DiskLimit = free + e.Leto.DiskLimit
+	}
+}
+
 func (e *TrackingEnvironment) Path(p ...string) string {
 	p = append([]string{e.ExperimentDir}, p...)
 	return filepath.Join(p...)
@@ -289,7 +298,9 @@ func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
 		return nil, err
 	}
 
-	if free < e.Leto.DiskLimit {
+	e.setDiskLimit(free)
+
+	if free < e.DiskLimit {
 		return nil, fmt.Errorf("unsufficient disk space: available: %s minimum: %s",
 			humanize.ByteSize(free),
 			humanize.ByteSize(e.Leto.DiskLimit))
