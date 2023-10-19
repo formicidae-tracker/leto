@@ -1,10 +1,15 @@
-# Leto: Vision Tacking management for the FORmicidae Tracker
+# FORmicidae Tracker (FORT) : Tracking Orchestration Service
 
-This directory contains two tools :
+[![DOI](https://zenodo.org/badge/185840088.svg)](https://zenodo.org/doi/10.5281/zenodo.10019090)
+
+
+The [FORmicidae Tracker (FORT)](https://formicidae-tracker.github.io) is an advanced online tracking system designed specifically for studying social insects, particularly ants and bees, FORT utilizes fiducial markers for extended individual tracking. Its key features include real-time online tracking and a modular design architecture that supports distributed processing. The project's current repositories encompass comprehensive hardware blueprints, technical documentation, and associated firmware and software for online tracking and offline data analysis.
+
+This directory contains two tools that aims to orchestrate tracking experiment :
  *  `leto-cli` a small command line tool that could be installed on
     any computer and used to manage leto instances on a local
     network. This is the tool most user want to install.
- * `leto` : a tool used to manage ann artemis process for the tracking
+ * `leto` : a tool used to manage an artemis process for the tracking
    of ants, it is installed on atracking computer as a service. Its
    administration is managed by the [FORT ansible
    script](https://github.com/formicidae-tracker/fort-configuration). Apart
