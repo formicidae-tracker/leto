@@ -90,7 +90,7 @@ func (l *Leto) reportLoadAverage() {
 
 func (l *Leto) check() error {
 	checks := []func() error{l.checkArtemis, l.checkFFMpeg}
-	if l.leto.DevMode == false {
+	if l.leto.DevMode == false && l.leto.FramegrabberType == leto.EURESYS_FG {
 		checks = append(checks, l.checkFirmwareVariant)
 	}
 
@@ -282,6 +282,10 @@ func (l *Leto) setMaster(hostname string) (err error) {
 		}
 	}()
 
+	if l.leto.FramegrabberType != leto.EURESYS_FG {
+		return fmt.Errorf("unavailabel: leto is not running on an euresys framegrabber, it is always a master")
+	}
+
 	if len(hostname) == 0 {
 		l.node.Master = ""
 		return
@@ -319,6 +323,10 @@ func (l *Leto) addSlave(hostname string) (err error) {
 		}
 	}()
 
+	if l.leto.FramegrabberType != leto.EURESYS_FG {
+		return fmt.Errorf("unavailabel: leto is not running on an euresys framegrabber, it is always a master")
+	}
+
 	err = l.setMaster("")
 	if err != nil {
 		return
@@ -350,6 +358,10 @@ func (l *Leto) removeSlave(hostname string) (err error) {
 			l.node.Save()
 		}
 	}()
+
+	if l.leto.FramegrabberType != leto.EURESYS_FG {
+		return fmt.Errorf("unavailabel: leto is not running on an euresys framegrabber, it is always a master")
+	}
 
 	return l.node.RemoveSlave(hostname)
 }

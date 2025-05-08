@@ -1,8 +1,18 @@
 package leto
 
-import "time"
+import (
+	"time"
+)
 
 //go:generate go run generate_version.go $VERSION
+
+type FGType int
+
+const (
+	UNKNOWN_FG FGType = iota
+	EURESYS_FG
+	HYPERION_FG
+)
 
 type Config struct {
 	LetoPort            int
@@ -10,6 +20,7 @@ type Config struct {
 	HermesBroadcastPort int
 	OlympusPort         int
 	DevMode             bool
+	FramegrabberType    FGType
 	DiskLimit           int64
 }
 
@@ -24,6 +35,7 @@ func init() {
 		LetoPort:            4000,
 		ArtemisIncomingPort: 4001,
 		HermesBroadcastPort: 4002,
+		FramegrabberType:    UNKNOWN_FG,
 		DiskLimit:           50 * 1024 * 1024, // 50 MiB
 	}
 }
