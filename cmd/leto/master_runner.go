@@ -64,7 +64,7 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	}
 	if env.Config.Camera.FPS != nil {
 		res.killingGrace = max(res.killingGrace, time.Duration(2.0*time.Second.Seconds() / *env.Config.Camera.FPS)*time.Second)
-		res.logger.Info("killing grace setting", "timeout", res.killingGrace)
+		res.logger.WithField("timeout", res.killingGrace).Info("killing grace setting")
 	}
 
 	if err := res.SetUp(); err != nil {

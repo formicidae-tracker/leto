@@ -428,8 +428,9 @@ func (l *Leto) LoadFromPersistentFile() {
 	}
 
 	if config.RestartOnReboot == false {
-		logger.Error("tracking did not quit gracefully, but it is not marked safe to restart",
-			"experiment", config.ExperimentName)
+		logger.WithField(
+			"experiment", config.ExperimentName,
+		).Error("tracking did not quit gracefully, but it is not marked safe to restart")
 		return
 	}
 
