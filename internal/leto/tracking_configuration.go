@@ -187,6 +187,7 @@ type TrackingConfiguration struct {
 	Highlights          *[]int                    `yaml:"highlights"`
 	Loads               *LoadBalancing            `yaml:"load-balancing"`
 	Threads             *int                      `yaml:"threads"`
+	RestartOnReboot     bool                      `yaml:"restart-on-reboot"`
 }
 
 func RecommendedTrackingConfiguration() TrackingConfiguration {

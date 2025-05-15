@@ -76,6 +76,7 @@ func ExampleLastExperimentLogCommand_config() {
 	// highlights: []
 	// load-balancing: null
 	// threads: 0
+	// restart-on-reboot: false
 }
 
 func ExampleLastExperimentLogCommand_all() {
@@ -120,6 +121,7 @@ func ExampleLastExperimentLogCommand_all() {
 	// highlights: []
 	// load-balancing: null
 	// threads: 0
+	// restart-on-reboot: false
 	//
 	// === End of Experiment YAML Configuration ===
 	//

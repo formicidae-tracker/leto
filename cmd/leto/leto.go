@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -73,7 +72,7 @@ func (l *Leto) reportLoadAverage() {
 	otel.Meter(instrumentationName).Float64ObservableGauge(
 		path.Join("leto", "loadAverage"),
 		metric.WithFloat64Callback(func(ctx context.Context, obs metric.Float64Observer) error {
-			content, err := ioutil.ReadFile("/proc/loadavg")
+			content, err := os.ReadFile("/proc/loadavg")
 			if err != nil {
 				return err
 			}
@@ -391,7 +390,7 @@ func (l *Leto) writePersistentFile() {
 			Error("could not marshal config data to persistent")
 		return
 	}
-	err = ioutil.WriteFile(l.persitentFilePath(), configData, 0644)
+	err = os.WriteFile(l.persitentFilePath(), configData, 0644)
 	if err != nil {
 		l.logger.
 			WithError(err).
@@ -411,10 +410,10 @@ func (l *Leto) removePersistentFile() {
 
 func (l *Leto) LoadFromPersistentFile() {
 	logger := l.logger.WithField("path", l.persitentFilePath())
-	configData, err := ioutil.ReadFile(l.persitentFilePath())
+	configData, err := os.ReadFile(l.persitentFilePath())
 	if err != nil {
 		if err != os.ErrNotExist {
-			logger.WithError(err).Error("could not read file")
+			logger.WithError(err).Warn("could not read file")
 		}
 		// if there is no file, there is nothing to load
 		return
@@ -427,6 +426,13 @@ func (l *Leto) LoadFromPersistentFile() {
 			Error("could not load persistent configuration")
 		return
 	}
+
+	if config.RestartOnReboot == false {
+		logger.Error("tracking did not quit gracefully, but it is not marked safe to restart",
+			"experiment", config.ExperimentName)
+		return
+	}
+
 	logger.Info("restarting experiment from persistent file")
 	err = l.Start(context.Background(), config)
 	if err != nil {
