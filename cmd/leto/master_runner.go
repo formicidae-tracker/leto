@@ -33,6 +33,8 @@ type masterRunner struct {
 	trackerCtx, otherCtx             context.Context
 	cancelLocalTracker, cancelOthers context.CancelFunc
 
+	killingGrace time.Duration
+
 	artemisOut, videoIn *os.File
 
 	subtasks map[string]<-chan error
@@ -58,7 +60,13 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		cancelOthers:       cancelOther,
 		logger:             tm.NewLogger("runner").WithContext(env.Context),
 		artemisStarted:     make(chan struct{}),
+		killingGrace:       500 * time.Millisecond,
 	}
+	if env.Config.Camera.FPS != nil {
+		res.killingGrace = max(res.killingGrace, time.Duration(2.0*time.Second.Seconds() / *env.Config.Camera.FPS)*time.Second)
+		res.logger.Info("killing grace setting", "timeout", res.killingGrace)
+	}
+
 	if err := res.SetUp(); err != nil {
 		return nil, err
 	}
@@ -134,7 +142,7 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 		r.artemisCmd.Process.Signal(os.Interrupt)
 
 		// if already terminated, will do nothing (artemis crashed before signal).
-		for !WaitDoneOrFunc(r.otherCtx.Done(), 500*time.Millisecond, func(grace time.Duration) {
+		for !WaitDoneOrFunc(r.otherCtx.Done(), r.killingGrace, func(grace time.Duration) {
 			r.logger.Warnf("killing artemis as it did not terminate after %s", grace)
 			r.cancelOthers() // to avoid to mark X timeout while we wait for termination
 			if err := r.artemisCmd.Process.Kill(); err != nil {
@@ -274,7 +282,7 @@ func (r *masterRunner) waitAllSubtasks() {
 		go func(name string, errs <-chan error) {
 			defer wg.Done()
 			var err error
-			delay := 500 * time.Millisecond
+			delay := r.killingGrace
 			total := time.Duration(0)
 			stop := false
 			for stop == false {
