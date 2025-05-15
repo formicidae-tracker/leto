@@ -10,7 +10,7 @@ import (
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/grandcat/zeroconf"
+	"github.com/hashicorp/mdns"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -193,10 +193,16 @@ func (l *LetoGRPCWrapper) Run(config leto.Config) error {
 	defer func() { <-idleConnections }()
 
 	go func() {
-		server, err := zeroconf.Register("leto."+host, "_leto._tcp", "local.", config.LetoPort, nil, nil)
+
+		service, err := mdns.NewMDNSService(host, "_leto._tcp", "", "", config.LetoPort, nil, []string{"Leto tracking service"})
 		if err != nil {
-			l.logger.WithError(err).Error("avahi register")
+			l.logger.WithError(err).Error("mDNS Service configuration")
 			return
+		}
+
+		server, err := mdns.NewServer(&mdns.Config{Zone: service})
+		if err != nil {
+			l.logger.WithError(err).Error("mDNS server start")
 		}
 		<-ctx.Done()
 		server.Shutdown()

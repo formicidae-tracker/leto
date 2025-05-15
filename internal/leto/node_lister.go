@@ -14,7 +14,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/grandcat/zeroconf"
+	"github.com/hashicorp/mdns"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -165,7 +165,13 @@ func (n *NodeLister) save() {
 		return
 	}
 
-	ioutil.WriteFile(n.cacheFilePath(), yamlData, 0644)
+	os.WriteFile(n.cacheFilePath(), yamlData, 0644)
+}
+
+func mdnsLookupContext(ctx context.Context, service string, entries chan<- *mdns.ServiceEntry) error {
+	params := mdns.DefaultParams(service)
+	params.Entries = entries
+	return mdns.QueryContext(ctx, params)
 }
 
 func (n *NodeLister) ListNodes() (map[string]Node, error) {
@@ -173,25 +179,21 @@ func (n *NodeLister) ListNodes() (map[string]Node, error) {
 		return n.Cache, nil
 	}
 
-	resolver, err := zeroconf.NewResolver(nil)
-	if err != nil {
-		return nil, fmt.Errorf("Could not create resolver: %s", err)
-	}
-	entries := make(chan *zeroconf.ServiceEntry, 100)
+	entries := make(chan *mdns.ServiceEntry, 64)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	err = resolver.Browse(ctx, "_leto._tcp", "local.", entries)
-	if err != nil {
-		return nil, fmt.Errorf("Could not browse for leto instances: %s", err)
-	}
 
-	<-ctx.Done()
+	go func() {
+		mdnsLookupContext(ctx, "_leto._tcp", entries)
+		close(entries)
+	}()
 
 	res := make(map[string]Node)
 
 	for e := range entries {
-		name := strings.TrimPrefix(e.Instance, "leto.")
-		address := strings.TrimSuffix(e.HostName, ".")
+		name := strings.TrimPrefix(e.Name, "leto.")
+		address := strings.TrimSuffix(e.Host, ".")
 		port := e.Port
 		res[name] = Node{Name: name, Address: address, Port: port}
 	}
