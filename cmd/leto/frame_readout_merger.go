@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/sirupsen/logrus"

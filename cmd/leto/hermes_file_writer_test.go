@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	. "gopkg.in/check.v1"
 )
 

@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 )
 
 type ArtemisListener interface {

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 )
 
 type FrameDispatcher interface {

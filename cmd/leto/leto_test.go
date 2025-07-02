@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/gabriel-vasile/mimetype"
 	. "gopkg.in/check.v1"

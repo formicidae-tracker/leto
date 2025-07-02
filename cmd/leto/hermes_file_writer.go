@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/proto"
 	"github.com/sirupsen/logrus"
@@ -205,7 +205,7 @@ func (w *hermesFileWriter) writeLine(r *hermes.FrameReadout, nextName string) er
 	// information. Most of the data is the list of ants and
 	// we just do a shallow copy of the slice. The other
 	// embedded field could be modified freely
-	toWrite := *r
+	toWrite := proto.Clone(r).(*hermes.FrameReadout)
 
 	// removes unucessary information on a per-frame basis. It
 	// is concurrently safe since we are not modifying a
@@ -217,7 +217,7 @@ func (w *hermesFileWriter) writeLine(r *hermes.FrameReadout, nextName string) er
 
 	b := proto.NewBuffer(nil)
 	line := &hermes.FileLine{
-		Readout: &toWrite,
+		Readout: toWrite,
 	}
 	if err := b.EncodeMessage(line); err != nil {
 		return fmt.Errorf("could not encode message: %w", err)

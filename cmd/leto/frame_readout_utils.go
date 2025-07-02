@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 )
 
 func ReadAllFrameReadout(ctx context.Context,

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	"github.com/golang/protobuf/ptypes"
 	. "gopkg.in/check.v1"
 )

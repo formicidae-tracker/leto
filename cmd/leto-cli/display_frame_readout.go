@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	"github.com/formicidae-tracker/leto/internal/leto"
 )
 

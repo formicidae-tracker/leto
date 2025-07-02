@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/formicidae-tracker/hermes"
+	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	"github.com/sirupsen/logrus"
 	. "gopkg.in/check.v1"
 
@@ -29,6 +29,31 @@ func Test(t *testing.T) {
 type FrameReadoutUtilsSuite struct{}
 
 var _ = Suite(&FrameReadoutUtilsSuite{})
+
+func checkReadoutEqual(c *C, obtained, expected *hermes.FrameReadout) {
+	c.Check(obtained.Timestamp, Equals, expected.Timestamp)
+	c.Check(obtained.FrameID, Equals, expected.FrameID)
+	c.Check(obtained.Time, DeepEquals, expected.Time)
+	c.Check(obtained.Error, Equals, expected.Error)
+	c.Check(obtained.ProducerUuid, Equals, expected.ProducerUuid)
+	c.Check(obtained.Quads, Equals, expected.Quads)
+	c.Check(obtained.Width, Equals, expected.Width)
+	c.Check(obtained.Height, Equals, expected.Height)
+	c.Check(obtained.Cuestart, DeepEquals, expected.Cuestart)
+	c.Check(obtained.Cueend, DeepEquals, expected.Cueend)
+	c.Check(len(obtained.Tags), Equals, len(expected.Tags))
+	size := Min(len(obtained.Tags), len(expected.Tags))
+	for i := 0; i < size; i++ {
+		checkTagEqual(c, obtained.Tags[i], expected.Tags[i], Commentf("idx=%d", i))
+	}
+}
+
+func checkTagEqual(c *C, obtained, expected *hermes.Tag, cmt interface{}) {
+	c.Check(obtained.ID, Equals, expected.ID, cmt)
+	c.Check(obtained.X, Equals, expected.X, cmt)
+	c.Check(obtained.Y, Equals, expected.Y, cmt)
+	c.Check(obtained.Theta, Equals, expected.Theta, cmt)
+}
 
 func (s *FrameReadoutUtilsSuite) TestHelloWorld(c *C) {
 	testdata := []*hermes.FrameReadout{
@@ -80,7 +105,8 @@ func (s *FrameReadoutUtilsSuite) TestHelloWorld(c *C) {
 		case m, ok := <-C:
 			c.Assert(ok, Equals, true)
 			c.Assert(i < len(testdata), Equals, true)
-			c.Check(m, DeepEquals, testdata[i])
+
+			checkReadoutEqual(c, m, testdata[i])
 			i += 1
 		case err, ok := <-E:
 			if ok == false {

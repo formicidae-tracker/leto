@@ -7,7 +7,7 @@ require (
 	github.com/atuleu/go-humanize v0.0.0-20230602193851-3c422bf7e236
 	github.com/atuleu/go-tablifier v0.2.1
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/formicidae-tracker/hermes v0.2.0
+	github.com/formicidae-tracker/hermes v0.5.6
 	github.com/formicidae-tracker/olympus v0.5.5
 	github.com/gabriel-vasile/mimetype v1.4.2
 	github.com/golang/mock v1.6.0
