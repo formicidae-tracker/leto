@@ -96,7 +96,7 @@ func (r *masterRunner) SetUp() error {
 
 	r.dispatcher = NewFrameDispatcher(r.fileWriter.Incoming(), r.hermesBroadcaster.Incoming())
 
-	r.video, err = NewVideoManager(r.otherCtx, r.env.ExperimentDir, *r.env.Config.Camera.FPS, r.env.Config.Stream)
+	r.video, err = NewVideoManager(r.otherCtx, r.env.ExperimentDir, *r.env.Config.Camera.FPS, r.env.Config.Video)
 	if err != nil {
 		return err
 	}

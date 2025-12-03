@@ -35,55 +35,6 @@ func (s *ArtemisManagerSuite) TestCanExtractVariantFromUpdateToolOutput(c *C) {
 	c.Check(res, Equals, "")
 }
 
-func (s *ArtemisManagerSuite) TestCanCheckVersion(c *C) {
-	testdata := []struct {
-		Actual, Minimal string
-		Expected        string
-	}{
-		{
-			"v1.2.3", "v1.2.3",
-			``,
-		},
-		{
-			"v1.3.3", "v1.2.3",
-			``,
-		},
-		{
-			"v0.3.3", "v0.3.2",
-			``,
-		},
-		{
-			"v1.2.3.4", "v1.2.3",
-			`Invalid character\(s\) found in patch number ".*"`,
-		},
-		{
-			"v1.2.3", "v1.2.3.4",
-			`Invalid character\(s\) found in patch number ".*"`,
-		},
-		{
-			"v0.3.3", "v0.2.4",
-			`Unexpected major version v0.3 \(expected: v0.2\)`,
-		},
-		{
-			"v2.3.3", "v1.2.4",
-			`Unexpected major version v2 \(expected: v1\)`,
-		},
-		{
-			"v2.3.3", "v2.3.4",
-			`Invalid version v2.3.3 \(minimal: v2.3.4\)`,
-		},
-	}
-
-	for _, d := range testdata {
-		err := checkArtemisVersion(d.Actual, d.Minimal)
-		if len(d.Expected) == 0 {
-			c.Check(err, IsNil)
-			continue
-		}
-		c.Check(err, ErrorMatches, d.Expected)
-	}
-}
-
 func (s *ArtemisManagerSuite) TestCheckFirmwareVariant(c *C) {
 	testdata := []struct {
 		C        NodeConfiguration

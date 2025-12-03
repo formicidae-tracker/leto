@@ -153,7 +153,7 @@ type videoTaskConfig struct {
 	tune        string
 }
 
-func newVideoTaskConfig(basedir string, fps float64, config leto.StreamConfiguration) (videoTaskConfig, error) {
+func newVideoTaskConfig(basedir string, fps float64, config leto.VideoConfiguration) (videoTaskConfig, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return videoTaskConfig{}, err
@@ -167,8 +167,8 @@ func newVideoTaskConfig(basedir string, fps float64, config leto.StreamConfigura
 		maxBitrate:   int(float64(*config.BitRateKB) * *config.BitRateMaxRatio),
 		destAddress:  *config.Host,
 		resolution:   "",
-		quality:      *config.Quality,
-		tune:         *config.Tune,
+		quality:      "fast",
+		tune:         "film",
 
 		period: 2 * time.Hour,
 	}, nil
@@ -188,7 +188,7 @@ type videoTask struct {
 	meter  metric.Meter
 }
 
-func NewVideoManager(ctx context.Context, basedir string, fps float64, config leto.StreamConfiguration) (VideoTask, error) {
+func NewVideoManager(ctx context.Context, basedir string, fps float64, config leto.VideoConfiguration) (VideoTask, error) {
 	conf, err := newVideoTaskConfig(basedir, fps, config)
 	if err != nil {
 		return nil, err

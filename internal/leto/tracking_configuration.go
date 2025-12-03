@@ -2,8 +2,8 @@ package leto
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
+	"os"
 	"reflect"
 	"time"
 
@@ -141,31 +141,37 @@ func (from *CameraConfiguration) Merge(to *CameraConfiguration) error {
 	return MergeConfiguration(from, to)
 }
 
-type StreamConfiguration struct {
-	Host            *string  `long:"stream-host" description:"host to stream to " yaml:"host"`
-	BitRateKB       *int     `long:"stream-bitrate" description:"Constant encoding bitrate to use in kb/s (recommended:2000)" yaml:"bitrate"`
-	BitRateMaxRatio *float64 `long:"stream-bitrate-max-ratio" description:"Constraint on the max ratio for bitrate encoding" yaml:"bitrate-max-ratio"`
-	Quality         *string  `long:"stream-quality" description:"libx264 quality preset (recommended:fast)" yaml:"quality"`
-	Tune            *string  `long:"stream-tune" description:"libx264 quality tuning (recommended:film)" yaml:"tuning"`
+type VideoConfiguration struct {
+	Host            *string  `long:"video-stream-host" description:"host to stream to " yaml:"host"`
+	BitRateKB       *int     `long:"video-bitrate" description:"Constant encoding bitrate to use in kb/s (recommended:2000)" yaml:"bitrate"`
+	BitRateMaxRatio *float64 `long:"video-bitrate-max-ratio" description:"Constraint on the max ratio for bitrate encoding" yaml:"bitrate-max-ratio"`
+	Height          *int     `long:"video-height" description:"Video height to archive on disk" yaml:"height"`
+	StreamHeight    *int     `long:"video-stream-height" description:"Video height to stream to host" yaml:"stream-height"`
+	StreamBitrateKB *int     `long:"video-stream-bitrate" description:"Video stream bitrate in kb/s" yaml:"stream-bitrate"`
+	NoTimeOverlay   *bool    `long:"video-no-time-overlay" description:"Do not add a time overlay on archived video" yaml:"no-time-overlay"`
 }
 
-func RecommendedStreamConfiguration() StreamConfiguration {
-	res := StreamConfiguration{
+func RecommendedStreamConfiguration() VideoConfiguration {
+	res := VideoConfiguration{
 		Host:            new(string),
 		BitRateKB:       new(int),
 		BitRateMaxRatio: new(float64),
-		Quality:         new(string),
-		Tune:            new(string),
+		Height:          new(int),
+		StreamHeight:    new(int),
+		StreamBitrateKB: new(int),
+		NoTimeOverlay:   new(bool),
 	}
 	*res.Host = ""
 	*res.BitRateKB = 2000
 	*res.BitRateMaxRatio = 1.5
-	*res.Quality = "fast"
-	*res.Tune = "film"
+	*res.Height = 1080
+	*res.StreamHeight = 1080
+	*res.StreamBitrateKB = 2000
+	*res.NoTimeOverlay = false
 	return res
 }
 
-func (from *StreamConfiguration) Merge(to *StreamConfiguration) error {
+func (from *VideoConfiguration) Merge(to *VideoConfiguration) error {
 	return MergeConfiguration(from, to)
 }
 
@@ -181,7 +187,7 @@ type TrackingConfiguration struct {
 	LegacyMode          *bool                     `long:"legacy-mode" description:"Produces a legacy mode data output" yaml:"legacy-mode"`
 	NewAntOutputROISize *int                      `long:"new-ant-size" description:"Size of the image when a new ant is found (recommended:600)" yaml:"new-ant-roi"`
 	NewAntRenewPeriod   *time.Duration            `long:"image-renew-period" description:"Period to renew ant snapshot (recommended:2h)" yaml:"image-renew-period"`
-	Stream              StreamConfiguration       `yaml:"stream"`
+	Video               VideoConfiguration        `yaml:"video"`
 	Camera              CameraConfiguration       `yaml:"camera"`
 	Detection           TagDetectionConfiguration `yaml:"apriltag"`
 	Highlights          *[]int                    `yaml:"highlights"`
@@ -195,7 +201,7 @@ func RecommendedTrackingConfiguration() TrackingConfiguration {
 		NewAntOutputROISize: new(int),
 		NewAntRenewPeriod:   new(time.Duration),
 		LegacyMode:          new(bool),
-		Stream:              RecommendedStreamConfiguration(),
+		Video:               RecommendedStreamConfiguration(),
 		Camera:              RecommendedCameraConfiguration(),
 		Detection:           RecommendedDetectionConfig(),
 		Highlights:          &([]int{}),
@@ -209,7 +215,7 @@ func RecommendedTrackingConfiguration() TrackingConfiguration {
 }
 
 func (from *TrackingConfiguration) Merge(to *TrackingConfiguration) error {
-	if err := from.Stream.Merge(&to.Stream); err != nil {
+	if err := from.Video.Merge(&to.Video); err != nil {
 		return err
 	}
 	if err := from.Camera.Merge(&to.Camera); err != nil {
@@ -262,7 +268,7 @@ func ParseConfiguration(content []byte) (*TrackingConfiguration, error) {
 }
 
 func ReadConfiguration(filename string) (*TrackingConfiguration, error) {
-	content, err := ioutil.ReadFile(filename)
+	content, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("Could not read '%s': %s", filename, err)
 	}
@@ -283,7 +289,7 @@ func (c *TrackingConfiguration) WriteConfiguration(filename string) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(filename, data, 0644)
+	err = os.WriteFile(filename, data, 0644)
 	if err != nil {
 		return fmt.Errorf("Could not write '%s': %s", filename, err)
 	}

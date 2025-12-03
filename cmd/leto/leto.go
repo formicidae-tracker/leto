@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/blang/semver"
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
@@ -53,6 +54,7 @@ func NewLeto(config leto.Config) (*Leto, error) {
 		tracer: otel.Tracer(instrumentationName),
 	}
 	l.runnerCond = sync.NewCond(&l.mx)
+
 	if err := l.check(); err != nil {
 		return nil, err
 	}
@@ -88,7 +90,15 @@ func (l *Leto) reportLoadAverage() {
 }
 
 func (l *Leto) check() error {
-	checks := []func() error{l.checkArtemis, l.checkFFMpeg}
+	if err := l.checkArtemis(); err != nil {
+		return err
+	}
+
+	checks := []func() error{}
+	if l.leto.ArtemisVersion == leto.ARTEMIS_0_4 {
+		checks = append(checks, l.checkFFMpeg)
+	}
+
 	if l.leto.DevMode == false && l.leto.FramegrabberType == leto.EURESYS_FG {
 		checks = append(checks, l.checkFirmwareVariant)
 	}
@@ -101,14 +111,35 @@ func (l *Leto) check() error {
 	return nil
 }
 
+func getArtemisVersion(version string) (leto.AVersion, error) {
+	v, err := semver.ParseTolerant(version)
+	if err != nil {
+		return leto.ARTEMIS_UNSUPPORTED, fmt.Errorf("could not parse version '%s': %w", version, err)
+	}
+
+	if v.Major != 0 {
+		return leto.ARTEMIS_UNSUPPORTED, fmt.Errorf("unsupported artemis version '%s'", version)
+	}
+
+	switch v.Minor {
+	case 4:
+		return leto.ARTEMIS_0_4, nil
+	case 5:
+		return leto.ARTEMIS_0_5, nil
+	default:
+		return leto.ARTEMIS_UNSUPPORTED, fmt.Errorf("unsupported artemis version '%s'", version)
+	}
+}
+
 func (l *Leto) checkArtemis() error {
 	cmd := exec.Command(artemisCommandName, "--version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("could not get artemis version: %s %w ", string(output), err)
 	}
-	artemisVersion := strings.TrimPrefix(strings.TrimSpace(string(output)), "artemis ")
-	return checkArtemisVersion(artemisVersion, leto.ARTEMIS_MIN_VERSION)
+
+	l.leto.ArtemisVersion, err = getArtemisVersion(strings.TrimPrefix(strings.TrimSpace(strings.Split(string(output), "\n")[0]), "artemis "))
+	return err
 }
 
 func (l *Leto) checkFFMpeg() error {

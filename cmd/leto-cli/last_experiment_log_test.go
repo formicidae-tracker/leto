@@ -50,12 +50,14 @@ func ExampleLastExperimentLogCommand_config() {
 	// legacy-mode: false
 	// new-ant-roi: 600
 	// image-renew-period: 2h0m0s
-	// stream:
+	// video:
 	//   host: ""
 	//   bitrate: 2000
 	//   bitrate-max-ratio: 1.5
-	//   quality: fast
-	//   tuning: film
+	//   height: 1080
+	//   stream-height: 1080
+	//   stream-bitrate: 2000
+	//   no-time-overlay: false
 	// camera:
 	//   strobe-delay: 0s
 	//   strobe-duration: 1.5ms
@@ -95,12 +97,14 @@ func ExampleLastExperimentLogCommand_all() {
 	// legacy-mode: false
 	// new-ant-roi: 600
 	// image-renew-period: 2h0m0s
-	// stream:
+	// video:
 	//   host: ""
 	//   bitrate: 2000
 	//   bitrate-max-ratio: 1.5
-	//   quality: fast
-	//   tuning: film
+	//   height: 1080
+	//   stream-height: 1080
+	//   stream-bitrate: 2000
+	//   no-time-overlay: false
 	// camera:
 	//   strobe-delay: 0s
 	//   strobe-duration: 1.5ms

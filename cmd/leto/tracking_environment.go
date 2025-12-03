@@ -17,6 +17,7 @@ import (
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -189,11 +190,119 @@ func (e *TrackingEnvironment) Path(p ...string) string {
 	return filepath.Join(p...)
 }
 
-func (e *TrackingEnvironment) newAntPath() string {
-	return e.Path("ants")
+func (e *TrackingEnvironment) newCloseUpPath() string {
+	if e.Leto.ArtemisVersion == leto.ARTEMIS_0_4 {
+		return e.Path("ants")
+	}
+	return e.Path("cu")
 }
 
 func (e *TrackingEnvironment) TrackingCommandArgs() []string {
+	switch e.Leto.ArtemisVersion {
+	case leto.ARTEMIS_0_4:
+		return e.trackingCommandArgs_0_4()
+	case leto.ARTEMIS_0_5:
+		return e.trackingCommandArgs_0_5()
+	}
+	return []string{"--version"}
+}
+
+func (e *TrackingEnvironment) trackingCommandArgs_0_5() []string {
+	args := []string{}
+
+	targetHost := "localhost"
+	if e.Node.IsMaster() == false {
+		targetHost = strings.TrimPrefix(e.Node.Master, "leto.") + ".local"
+	}
+
+	if len(*e.Config.Camera.StubPaths) != 0 {
+		args = append(args, "--stub-image-paths="+strings.Join(*e.Config.Camera.StubPaths, ","))
+	}
+
+	if e.TestMode == true {
+		args = append(args, "--test-mode")
+	}
+	args = append(args, "--leto.host="+targetHost)
+	args = append(args, fmt.Sprintf("--leto.port=%d", e.Leto.ArtemisIncomingPort))
+	args = append(args, "--process.uuid="+e.Config.Loads.SelfUUID)
+
+	if *e.Config.Threads > 0 {
+		logrus.WithField("option", "Threads").Warn("unsupported tracking configuration for v0.5")
+	}
+
+	if *e.Config.LegacyMode == true {
+		args = append(args, "--legacy-mode")
+	}
+	args = append(args, fmt.Sprintf("--camera.fps=%f", *e.Config.Camera.FPS))
+	args = append(args, fmt.Sprintf("--camera.strobe=%s", e.Config.Camera.StrobeDuration))
+	args = append(args, fmt.Sprintf("--camera.strobe-delay=%s", e.Config.Camera.StrobeDelay))
+
+	args = append(args, "--at.family="+*e.Config.Detection.Family)
+	args = append(args, fmt.Sprintf("--at.quad-decimate=%f", *e.Config.Detection.Quad.Decimate))
+	args = append(args, fmt.Sprintf("--at.quad-sigma=%f", *e.Config.Detection.Quad.Sigma))
+	if *e.Config.Detection.Quad.RefineEdges == true {
+		args = append(args, "--at.refine-edges")
+	}
+	args = append(args, fmt.Sprintf("--at.quad-min-cluster=%d", *e.Config.Detection.Quad.MinClusterPixel))
+	args = append(args, fmt.Sprintf("--at.quad-max-n-maxima=%d", *e.Config.Detection.Quad.MaxNMaxima))
+	args = append(args, fmt.Sprintf("--at.quad-critical-radian=%f", *e.Config.Detection.Quad.CriticalRadian))
+	args = append(args, fmt.Sprintf("--at.quad-max-line-mse=%f", *e.Config.Detection.Quad.MaxLineMSE))
+	args = append(args, fmt.Sprintf("--at.quad-min-bw-diff=%d", *e.Config.Detection.Quad.MinBWDiff))
+	if *e.Config.Detection.Quad.Deglitch == true {
+		args = append(args, "--at.quad-deglitch")
+	}
+
+	if e.Node.IsMaster() == true {
+		args = append(args, "--video-output.host="+*e.Config.Video.Host)
+		args = append(args, "--video-output.dir="+e.ExperimentDir)
+		args = append(args, fmt.Sprintf("--video-output.height=%d", *e.Config.Video.Height))
+		args = append(args, fmt.Sprintf("--video-output.bitrate=%d", *e.Config.Video.BitRateKB))
+		args = append(args, fmt.Sprintf("--video-output.bitrate-max-ratio=%f", *e.Config.Video.BitRateMaxRatio))
+		if *e.Config.Video.NoTimeOverlay == true {
+			args = append(args, "--video-output.no-timestamp-overlay")
+		}
+		args = append(args, fmt.Sprintf("--video-output.file-max-size-time=%s", *e.Config.NewAntRenewPeriod))
+		args = append(args, fmt.Sprintf("--video-output.stream-height=%d", *e.Config.Video.StreamHeight))
+		args = append(args, fmt.Sprintf("--video-output.stream-bitrate=%d", *e.Config.Video.StreamBitrateKB))
+
+		args = append(args, "--close-up-dir="+e.newCloseUpPath(),
+			fmt.Sprintf("--close-up-size=%d", *e.Config.NewAntOutputROISize),
+			fmt.Sprintf("--renew-period=%s", e.Config.NewAntRenewPeriod))
+
+	} else {
+		args = append(args,
+			"--camera.slave-width", fmt.Sprintf("%d", e.Config.Loads.Width),
+			"--camera.slave-height", fmt.Sprintf("%d", e.Config.Loads.Height))
+	}
+
+	args = append(args, "--log-output-dir="+e.ExperimentDir)
+
+	if len(e.Balancing.IDsByUUID) > 1 {
+		args = append(args, "--process.stride", fmt.Sprintf("%d", len(e.Balancing.IDsByUUID)))
+		ids := []string{}
+		for i, isSet := range e.Balancing.IDsByUUID[e.Config.Loads.SelfUUID] {
+			if isSet == false {
+				continue
+			}
+			ids = append(ids, fmt.Sprintf("%d", i))
+		}
+		args = append(args, "--process.ids", strings.Join(ids, ","))
+	}
+
+	tags := make([]string, 0, len(*e.Config.Highlights))
+	for _, id := range *e.Config.Highlights {
+		tags = append(tags, "0x"+strconv.FormatUint(uint64(id), 16))
+	}
+
+	if len(tags) != 0 {
+		args = append(args, "--display.highlight-tags", strings.Join(tags, ","))
+	}
+
+	return args
+
+}
+
+func (e *TrackingEnvironment) trackingCommandArgs_0_4() []string {
 	args := []string{}
 
 	targetHost := "localhost"
@@ -241,7 +350,7 @@ func (e *TrackingEnvironment) TrackingCommandArgs() []string {
 		args = append(args, "--video-output-to-stdout")
 		args = append(args, "--video-output-height", "1080")
 		args = append(args, "--video-output-add-header")
-		args = append(args, "--new-ant-output-dir", e.newAntPath(),
+		args = append(args, "--new-ant-output-dir", e.newCloseUpPath(),
 			"--new-ant-roi-size", fmt.Sprintf("%d", *e.Config.NewAntOutputROISize),
 			"--image-renew-period", fmt.Sprintf("%s", e.Config.NewAntRenewPeriod))
 
@@ -312,7 +421,7 @@ func (e *TrackingEnvironment) SetUp() (*exec.Cmd, error) {
 func (e *TrackingEnvironment) makeAllDestinationDirs() error {
 	target := e.ExperimentDir
 	if e.Node.IsMaster() == true {
-		target = e.newAntPath()
+		target = e.newCloseUpPath()
 	}
 	if err := os.MkdirAll(target, 0755); err != nil {
 		return fmt.Errorf("could not create %s: %w", target, err)

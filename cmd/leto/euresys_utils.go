@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
-
-	"github.com/blang/semver"
 )
 
 var coaxlinkFirmwareCommandName = "coaxlink-firmware"
@@ -45,31 +43,6 @@ func checkFirmwareVariant(c NodeConfiguration, variant string) error {
 
 	if variant != expected {
 		return fmt.Errorf("unexpected firmware variant %s (expected: %s)", variant, expected)
-	}
-
-	return nil
-}
-
-func checkArtemisVersion(actual, minimal string) error {
-	a, err := semver.ParseTolerant(actual)
-	if err != nil {
-		return err
-	}
-	m, err := semver.ParseTolerant(minimal)
-	if err != nil {
-		return err
-	}
-
-	if m.Major == 0 {
-		if a.Major != 0 || a.Minor != m.Minor {
-			return fmt.Errorf("Unexpected major version v%d.%d (expected: v%d.%d)", a.Major, a.Minor, m.Major, m.Minor)
-		}
-	} else if m.Major != a.Major {
-		return fmt.Errorf("Unexpected major version v%d (expected: v%d)", a.Major, m.Major)
-	}
-
-	if a.GE(m) == false {
-		return fmt.Errorf("Invalid version v%s (minimal: v%s)", a, m)
 	}
 
 	return nil

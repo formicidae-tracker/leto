@@ -40,7 +40,7 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 	if err != nil {
 		return nil, err
 	}
-	target := env.Config.Stream.Host
+	target := env.Config.Video.Host
 	if target == nil || len(*target) == 0 {
 		return nil, errors.New("no olympus host in configuration")
 	}

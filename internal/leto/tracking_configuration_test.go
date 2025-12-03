@@ -52,9 +52,9 @@ func (s *ConfigurationSuite) TestCanBeMerged(c *C) {
 	*to.NewAntRenewPeriod = 10 * time.Minute
 	*expected.NewAntRenewPeriod = 10 * time.Minute
 
-	to.Stream.Host = new(string)
-	*to.Stream.Host = "google.com"
-	*expected.Stream.Host = "google.com"
+	to.Video.Host = new(string)
+	*to.Video.Host = "google.com"
+	*expected.Video.Host = "google.com"
 
 	to.Camera.FPS = new(float64)
 	*to.Camera.FPS = 10.0
@@ -94,12 +94,14 @@ legacy-mode: false
 new-ant-roi: 600
 image-renew-period: 2h
 threads: 0
-stream:
+video:
   host: ""
   bitrate: 2000
   bitrate-max-ratio: 1.5
-  quality: fast
-  tuning: film
+  height: 1080
+  stream-height: 1080
+  stream-bitrate: 2000
+  no-time-overlay: false
 camera:
   fps: 8.0
   strobe-delay: 0us
@@ -145,7 +147,7 @@ func (s *ConfigurationSuite) TestMergingFailCheck(c *C) {
 	}{
 		{
 			&CameraConfiguration{},
-			&StreamConfiguration{},
+			&VideoConfiguration{},
 			`Mismatching type .* and .*`,
 		},
 		{

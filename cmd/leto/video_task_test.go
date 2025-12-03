@@ -27,12 +27,13 @@ func (s *VideoTaskSuite) Basedir() string {
 
 var _ = Suite(&VideoTaskSuite{})
 
-var streamConfiguration = leto.StreamConfiguration{
+var streamConfiguration = leto.VideoConfiguration{
 	Host:            newWithValue(""),
 	BitRateKB:       newWithValue(3000),
 	BitRateMaxRatio: newWithValue(3.0),
-	Quality:         newWithValue("faster"),
-	Tune:            newWithValue("stillimage"),
+	Height:          newWithValue(2160),
+	StreamHeight:    newWithValue(480),
+	StreamBitrateKB: newWithValue(1000),
 }
 
 func newWithValue[T any](v T) *T {

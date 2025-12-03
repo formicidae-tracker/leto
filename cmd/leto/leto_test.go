@@ -210,3 +210,47 @@ func (s *LetoSuite) TestArtemisFailure(c *C) {
 	c.Assert(log, Not(IsNil))
 	c.Check(log.HasError, Equals, true)
 }
+
+func (s *LetoSuite) TestCanCheckVersion(c *C) {
+	testdata := []struct {
+		Version         string
+		ExpectedVersion leto.AVersion
+		Expected        string
+	}{
+		{
+			"v1.2.3",
+			leto.ARTEMIS_UNSUPPORTED,
+			`unsupported artemis version 'v1.2.3'`,
+		},
+		{
+			"v0.4.3",
+			leto.ARTEMIS_0_4,
+			``,
+		},
+		{
+			"v0.5.0-rc1+123-gfffffff",
+			leto.ARTEMIS_0_5,
+			``,
+		},
+		{
+			"v1.2.3.4",
+			leto.ARTEMIS_UNSUPPORTED,
+			`could not parse version 'v1.2.3.4': Invalid character\(s\) found in patch number ".*"`,
+		},
+		{
+			"v0.3.3",
+			leto.ARTEMIS_UNSUPPORTED,
+			`unsupported artemis version 'v0.3.3'`,
+		},
+	}
+
+	for _, d := range testdata {
+		res, err := getArtemisVersion(d.Version)
+		if len(d.Expected) == 0 {
+			c.Check(err, IsNil)
+			continue
+		}
+		c.Check(res, Equals, d.ExpectedVersion)
+		c.Check(err, ErrorMatches, d.Expected)
+	}
+}

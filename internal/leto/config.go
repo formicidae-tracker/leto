@@ -14,6 +14,14 @@ const (
 	HYPERION_FG
 )
 
+type AVersion string
+
+const (
+	ARTEMIS_0_4         AVersion = "v0.4.0"
+	ARTEMIS_0_5                  = "v0.5.0"
+	ARTEMIS_UNSUPPORTED          = "v0.0.0"
+)
+
 type Config struct {
 	LetoPort            int
 	ArtemisIncomingPort int
@@ -22,11 +30,11 @@ type Config struct {
 	DevMode             bool
 	FramegrabberType    FGType
 	DiskLimit           int64
+	ArtemisVersion      AVersion
 }
 
 var DefaultConfig Config
 
-const ARTEMIS_MIN_VERSION = "v0.4.0"
 const NODE_CACHE_TTL = 5 * time.Second
 
 func init() {
