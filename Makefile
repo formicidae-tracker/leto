@@ -1,5 +1,8 @@
 all: leto pkg/letopb cmd/leto/leto cmd/leto-cli/leto-cli check
 
+generate:
+	make -C cmd/leto generate
+
 leto:
 	make -C internal/leto
 	make -C pkg/letopb

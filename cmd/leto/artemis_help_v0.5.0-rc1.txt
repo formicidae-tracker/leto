@@ -1,0 +1,59 @@
+Usage:
+artemis [OPTIONS]
+
+run apriltag detection and coordinates with leto for results
+
+Application Options:
+      --stub-image-paths: Stub images to use instead of the camera as a comma separated list. [default: ]
+  -V, --version     : Print the version and exit
+      --fetch-resolution: Prints the camera resolution
+      --log-output-dir: Directory to puts logs in [default: ]
+      --test-mode   : Run with a test-mode overlay
+      --legacy-mode : Uses a legacy mode data output for ants cataloging and video output display. The data will be convertible to the data expected by the former Keller's group tracking system
+      --close-up-dir: Path to save new detected individuals close-ups [default: ]
+      --close-up-size: Size of the close-up for new individuals [default: 600]
+      --renew-period: Close-Up cataloguing renew period [default: 2h0m0s]
+
+at: option regarding tag detection
+      --at.family   : Family to use for detection [default: ]
+      --at.quad-decimate: Decimate original image for faster computation but worse pose estimation. Should be 1.0 (no decimation), 1.5, 2, 3 or 4 [default: 1]
+      --at.quad-sigma: Apply a gaussian filter for quad detection, noisy image likes a slight filter like 0.8, for ant detection, 0.0 is almost always fine [default: 0]
+      --at.refine-edges: Refines the edge of the quad, especially needed if decimation is used.
+      --at.quad-min-cluster: Minimum number of pixel to consider it a quad [default: 5]
+      --at.quad-max-n-maxima: Number of candidate to consider to fit quad corner [default: 10]
+      --at.quad-critical-radian: Rejects quad with angle to close to 0 or 180 degrees [default: 0.174532994628]
+      --at.quad-max-line-mse: MSE threshold to reject a fitted quad [default: 10]
+      --at.quad-min-bw-diff: Difference in pixel value to consider a region black or white [default: 40]
+      --at.quad-deglitch: Deglitch for noisy images
+
+camera: options regarding camera and illumination
+      --camera.fps  : Desired camera FPS [default: 8]
+      --camera.strobe: strobe duration [default: 1.5ms]
+      --camera.strobe-delay: Camera strobe delay [default: 0s]
+      --camera.slave-width: Camera Width for slave mode [default: 0]
+      --camera.slave-height: Camera Height for slave mode [default: 0]
+
+display: display options
+      --display.highlight-tags: Comma separated list of tags to highlight when drawing detections [default: ]
+
+leto: Options regarding communication with leto
+      --leto.host   : Host to send tag detection readout [default: ]
+      --leto.port   : Host to send tag detection readout [default: 3002]
+
+process: options regarding process of frames
+      --process.ids : Frame ID to process in the sequence, if empty, consider alls [default: ]
+      --process.stride: Frame sequence length [default: 1]
+      --process.uuid: The UUID to mark data sent over network [default: ]
+
+video-output: Options regarding video output
+      --video-output.height: Video output height. 0 for original size [default: 1080]
+      --video-output.stream-height: Video output height [default: 1080]
+      --video-output.dir: Video output dir, disable if empty [default: ]
+      --video-output.host: Host to stream to, disabled if empty [default: ]
+      --video-output.bitrate: Mean bitrate in kbps for disk encoding [default: 2000]
+      --video-output.bitrate-max-ratio: maximum peek bitrate [default: 1.5]
+      --video-output.no-timestamp-overlay: disable timestamp overlay
+      --video-output.file-max-size-time: maximum time for a video file before splitting [default: 2h0m0s]
+
+Help Options:
+  -h, --help        : displays this help message

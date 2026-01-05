@@ -1,0 +1,36 @@
+low-level vision detection for the FORmicidae Tracker
+option(s):
+  --at-family               : The apriltag family to use (default: '')
+  --at-quad-critical-radian : Rejects quad with angle to close to 0 or 180 degrees (default: 0.174533)
+  --at-quad-decimate        : Decimate original image for faster computation but worse pose estimation. Should be 1.0 (no decimation), 1.5, 2, 3 or 4 (default: 1)
+  --at-quad-deglitch        : Deglitch only for noisy images
+  --at-quad-max-line-mse    : MSE threshold to reject a fitted quad (default: 10)
+  --at-quad-max-n-maxima    : Number of candidate to consider to fit quad corner (default: 10)
+  --at-quad-min-bw-diff     : Difference in pixel value to consider a region black or white (default: 40)
+  --at-quad-min-cluster     : Minimum number of pixel to consider it a quad (default: 5)
+  --at-quad-sigma           : Apply a gaussian filter for quad detection, noisy image likes a slight filter like 0.8, for ant detection, 0.0 is almost always fine (default: 0)
+  --at-refine-edges         : Refines the edge of the quad, especially needed if decimation is used.
+  --camera-fps              : Camera FPS to use (default: 8)
+  --camera-slave-height     : Camera Height argument for slave mode (default: 1088421888)
+  --camera-slave-width      : Camera Width argument for slave mode (default: 0)
+  --camera-strobe           : Camera Strobe duration (default: '1.5ms')
+  --camera-strobe-delay     : Camera Strobe delay (default: '0s')
+  --fetch-resolution        : Print the camera resolution
+  --frame-ids               : Frame ID to consider in the frame sequence, if empty consider all (default: '')
+  --frame-stride            : Frame sequence length (default: 1)
+  -h/--help                 : Print this help message
+  --highlight-tags          : Tag to highlight when drawing detections (default: '')
+  --host                    : Host to send tag detection readout (default: '')
+  --image-renew-period      : ant cataloguing and full frame export renew period (default: '2h0m0s')
+  --legacy-mode             : Uses a legacy mode data output for ants cataloging and video output display. The data will be convertible to the data expected by the former Keller's group tracking system
+  --log-output-dir          : Directory to put logs in (default: '')
+  --new-ant-output-dir      : Path where to save new detected ant pictures (default: '')
+  --new-ant-roi-size        : Size of the image to save when a new ant is found (default: 600)
+  -p/--port                 : Port to send tag detection readout (default: 3002)
+  --stub-image-paths        : Use a suite of stub images instead of an actual framegrabber (default: '')
+  --test-mode               : Test mode, adds an overlay detection drawing and statistics
+  --uuid                    : The UUID to mark data sent over network (default: '')
+  --version                 : Print version
+  --video-output-add-header : Adds binary header to stdout output
+  --video-output-height     : Video Output height (width computed to maintain aspect ratio (default: 1080)
+  --video-output-to-stdout  : Sends video output to stdout
