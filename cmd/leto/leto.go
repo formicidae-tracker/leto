@@ -90,7 +90,7 @@ func (l *Leto) reportLoadAverage() {
 }
 
 func (l *Leto) check() error {
-	if err := l.checkArtemis(); err != nil {
+	if err := l.checkArtemis(); err != nil && l.leto.DevMode == false {
 		return err
 	}
 

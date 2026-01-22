@@ -7,10 +7,10 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/betamos/zeroconf"
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/hashicorp/mdns"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -193,19 +193,16 @@ func (l *LetoGRPCWrapper) Run(config leto.Config) error {
 	defer func() { <-idleConnections }()
 
 	go func() {
-
-		service, err := mdns.NewMDNSService(host, "_leto._tcp", "", "", config.LetoPort, nil, []string{"Leto tracking service"})
+		zcType := zeroconf.NewType("_leto._tcp")
+		self := zeroconf.NewService(zcType, host, uint16(l.leto.leto.LetoPort))
+		client, err := zeroconf.New().Publish(self).Open()
 		if err != nil {
-			l.logger.WithError(err).Error("mDNS Service configuration")
-			return
+			l.logger.WithError(err).Error("mDNS Service configuration failure")
 		}
+		l.logger.WithFields(logrus.Fields{"host": host}).Info("mDNS published started")
 
-		server, err := mdns.NewServer(&mdns.Config{Zone: service})
-		if err != nil {
-			l.logger.WithError(err).Error("mDNS server start")
-		}
 		<-ctx.Done()
-		server.Shutdown()
+		client.Close()
 	}()
 
 	l.logger.WithField("address", addr).Info("listening")

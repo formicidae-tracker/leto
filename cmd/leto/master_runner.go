@@ -96,21 +96,26 @@ func (r *masterRunner) SetUp() error {
 
 	r.dispatcher = NewFrameDispatcher(r.fileWriter.Incoming(), r.hermesBroadcaster.Incoming())
 
-	r.video, err = NewVideoManager(r.otherCtx, r.env.ExperimentDir, *r.env.Config.Camera.FPS, r.env.Config.Video)
-	if err != nil {
-		return err
-	}
+	if r.env.Leto.ArtemisVersion == leto.ARTEMIS_0_4 {
+		r.video, err = NewVideoManager(r.otherCtx, r.env.ExperimentDir, *r.env.Config.Camera.FPS, r.env.Config.Video)
+		if err != nil {
+			return err
+		}
 
-	r.videoIn, r.artemisOut, err = os.Pipe()
-	if err != nil {
-		return err
+		r.videoIn, r.artemisOut, err = os.Pipe()
+		if err != nil {
+			return err
+		}
+
 	}
 
 	r.artemisCmd, err = r.env.SetUp()
 	if err != nil {
 		return err
 	}
-	r.artemisCmd.Stdout = r.artemisOut
+	if r.artemisOut != nil {
+		r.artemisCmd.Stdout = r.artemisOut
+	}
 
 	r.olympus, err = NewOlympusTask(r.otherCtx, r.env)
 	if err != nil {
@@ -179,9 +184,11 @@ func (r *masterRunner) startSubtasks() {
 	r.startSubtask(r.dispatcher, "frame-dispatcher")
 	r.startSubtask(r.fileWriter, "writer")
 	r.startSubtask(r.hermesBroadcaster, "broadcaster")
-	r.startSubtaskFunction(func() error {
-		return r.video.Run(r.videoIn)
-	}, "video")
+	if r.video != nil {
+		r.startSubtaskFunction(func() error {
+			return r.video.Run(r.videoIn)
+		}, "video")
+	}
 
 	// slaves must be started before local tracker !!
 	r.startSlaves()
@@ -252,6 +259,10 @@ func (r *masterRunner) stopLocalTracker() {
 
 func (r *masterRunner) waitForLocalTracker() error {
 	err := <-r.subtasks["local-tracker"]
+	if r.artemisOut == nil {
+		return err
+	}
+
 	if cerr := r.artemisOut.Close(); cerr != nil {
 		r.logger.WithError(err).Warn("could not close artemis out pipe")
 	}
@@ -259,10 +270,12 @@ func (r *masterRunner) waitForLocalTracker() error {
 }
 
 func (r *masterRunner) stopAllOtherSubtasks() {
-	err := r.artemisOut.Close()
-	if err != nil {
-		r.logger.WithError(err).
-			Warn("could not kill artemis out pipe while cancelling other substasks")
+	if r.artemisOut != nil {
+		err := r.artemisOut.Close()
+		if err != nil {
+			r.logger.WithError(err).
+				Warn("could not kill artemis out pipe while cancelling other substasks")
+		}
 	}
 	r.cancelOthers()
 }

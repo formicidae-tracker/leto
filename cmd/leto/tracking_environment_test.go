@@ -62,6 +62,9 @@ func (s *TrackingEnvironmentSuite) TestArtemisArguments(c *C) {
 		args := s.env.TrackingCommandArgs()
 		for _, a := range args {
 			a = strings.Split(a, "=")[0]
+			if len(a) == 0 || a[0] != '-' {
+				continue
+			}
 			c.Check(s.versions[d.Version].allowed[a], Equals, true, Commentf("Artemis version %s does not support options '%s'", d.Version, a))
 		}
 	}

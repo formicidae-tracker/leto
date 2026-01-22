@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,9 +11,9 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/betamos/zeroconf"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/hashicorp/mdns"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -120,10 +119,14 @@ func (n Node) StopTracking() error {
 func (n Node) GetStatus() (*letopb.Status, error) {
 	conn, client, err := n.Connect()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetStatus('%s') : %w", n.Name, err)
 	}
 	defer closeAndLogError(conn)
-	return client.GetStatus(context.Background(), &letopb.Empty{})
+	s, err := client.GetStatus(context.Background(), &letopb.Empty{})
+	if err != nil {
+		return nil, fmt.Errorf("GetStatus('%s') : %w", n.Name, err)
+	}
+	return s, nil
 }
 
 func (n Node) GetLastExperimentLog() (*letopb.ExperimentLog, error) {
@@ -146,7 +149,7 @@ func (n *NodeLister) cacheFilePath() string {
 }
 
 func (n *NodeLister) load() {
-	cachedData, err := ioutil.ReadFile(n.cacheFilePath())
+	cachedData, err := os.ReadFile(n.cacheFilePath())
 	if err != nil {
 		return
 	}
@@ -168,34 +171,45 @@ func (n *NodeLister) save() {
 	os.WriteFile(n.cacheFilePath(), yamlData, 0644)
 }
 
-func mdnsLookupContext(ctx context.Context, service string, entries chan<- *mdns.ServiceEntry) error {
-	params := mdns.DefaultParams(service)
-	params.Entries = entries
-	return mdns.QueryContext(ctx, params)
+func zeroconfLookupContext(ctx context.Context, service string, entries chan<- *zeroconf.Service) error {
+	defer close(entries)
+	leto := zeroconf.NewType(service)
+	client, err := zeroconf.New().Browse(func(e zeroconf.Event) {
+		switch e.Op {
+		case zeroconf.OpAdded:
+			entries <- e.Service
+		case zeroconf.OpUpdated:
+			entries <- e.Service
+		case zeroconf.OpRemoved:
+			return
+		}
+	}, leto).Open()
+	if err != nil {
+		return err
+	}
+	<-ctx.Done()
+	return client.Close()
 }
 
 func (n *NodeLister) ListNodes() (map[string]Node, error) {
-	if time.Now().Before(n.CacheDate.Add(NODE_CACHE_TTL)) == true {
+	useCache := len(os.Getenv("NOCACHE")) == 0
+	if useCache && time.Now().Before(n.CacheDate.Add(NODE_CACHE_TTL)) == true {
 		return n.Cache, nil
 	}
 
-	entries := make(chan *mdns.ServiceEntry, 64)
+	entries := make(chan *zeroconf.Service, 64)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	go func() {
-		mdnsLookupContext(ctx, "_leto._tcp", entries)
-		close(entries)
-	}()
-
+	go zeroconfLookupContext(ctx, "_leto._tcp", entries)
 	res := make(map[string]Node)
 
 	for e := range entries {
-		name := strings.TrimPrefix(e.Name, "leto.")
-		address := strings.TrimSuffix(e.Host, ".")
+		name := strings.Split(e.Name, "._leto._tcp")[0]
+		address := strings.TrimSuffix(e.Hostname, ".")
 		port := e.Port
-		res[name] = Node{Name: name, Address: address, Port: port}
+		res[name] = Node{Name: name, Address: address, Port: int(port)}
 	}
 	n.Cache = res
 	n.CacheDate = time.Now()

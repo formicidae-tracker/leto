@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/adrg/xdg"
@@ -29,12 +28,7 @@ func GetNodeConfiguration() NodeConfiguration {
 		return defaultNodeConfiguration
 	}
 
-	conf, err := os.Open(confPath)
-	if err != nil {
-		return defaultNodeConfiguration
-	}
-	defer conf.Close()
-	txt, err := ioutil.ReadAll(conf)
+	txt, err := os.ReadFile(confPath)
 	if err != nil {
 		return defaultNodeConfiguration
 	}
@@ -58,7 +52,7 @@ func (c NodeConfiguration) Save() {
 	if err != nil {
 		return
 	}
-	ioutil.WriteFile(confPath, data, 0644)
+	os.WriteFile(confPath, data, 0644)
 }
 
 func (c NodeConfiguration) IsMaster() bool {

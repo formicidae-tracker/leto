@@ -78,7 +78,7 @@ func (c *LastExperimentLogCommand) printFooter(section string) {
 
 func (c *LastExperimentLogCommand) printConfiguration(log *letopb.ExperimentLog) {
 	c.printHeader("Experiment YAML Configuration")
-	fmt.Printf(log.YamlConfiguration)
+	fmt.Printf("%s", log.YamlConfiguration)
 	c.printFooter("Experiment YAML Configuration")
 }
 

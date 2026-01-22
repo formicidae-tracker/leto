@@ -51,6 +51,7 @@ video-output: Options regarding video output
       --video-output.dir: Video output dir, disable if empty [default: ]
       --video-output.host: Host to stream to, disabled if empty [default: ]
       --video-output.bitrate: Mean bitrate in kbps for disk encoding [default: 2000]
+      --video-output.stream-bitrate: Mean bitrate in kbps for monitoring streaming [default: 1000]
       --video-output.bitrate-max-ratio: maximum peek bitrate [default: 1.5]
       --video-output.no-timestamp-overlay: disable timestamp overlay
       --video-output.file-max-size-time: maximum time for a video file before splitting [default: 2h0m0s]
