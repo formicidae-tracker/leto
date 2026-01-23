@@ -1,22 +1,18 @@
-version: "3.9"
-
 services:
   leto:
     build:
       context: .
-    hostname: leto-dev
     extra_hosts:
       - olympus-dev.local:host-gateway
       - signoz:host-gateway
     devices:
       - /dev/dri/card1
     ipc: host
+    network_mode: host
     volumes:
       - ./frames:/data
       - /tmp/.X11-unix:/tmp/.X11-unix
       - $HOME/.Xauthority:/home/fort-user/.Xauthority
-      - /var/run/dbus:/var/run/dbus
-      - /var/run/avahi-daemon/socket:/var/run/avahi-daemon/socket
     command:
       - --dev
       - -vv
@@ -24,7 +20,6 @@ services:
       - DISPLAY
       # - LETO_OTEL_ENDPOINT=signoz:4317
     ports:
-      - "5353:5353"
       - "4000:4000" # gRPC
       - "4001:4001" # trackers, if using master slave.
       - "4002:4002" # Broadcast
