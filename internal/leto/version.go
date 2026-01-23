@@ -3,4 +3,4 @@
 package leto
 
 // Current package version
-var LETO_VERSION = "v0.5.2-13-ga563ffc"
+var LETO_VERSION = "v0.5.2-14-g25605f9"

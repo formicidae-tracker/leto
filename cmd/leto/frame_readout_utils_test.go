@@ -3,28 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
-	"flag"
-	"io"
-	"log/slog"
 	"math"
 	"math/rand"
-	"testing"
 
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	. "gopkg.in/check.v1"
 
 	"github.com/golang/protobuf/proto"
 )
-
-var logstostderr = flag.Bool("logstostderr", false, "leaves module log to stderr, otherwise it will be discarded")
-
-// Hook up gocheck into the "go test" runner.
-func Test(t *testing.T) {
-	if *logstostderr == false {
-		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	}
-	TestingT(t)
-}
 
 type FrameReadoutUtilsSuite struct{}
 

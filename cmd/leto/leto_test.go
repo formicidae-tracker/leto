@@ -29,6 +29,20 @@ func checkFFMpeg() bool {
 	return exec.Command("ffmpeg", "-version").Run() == nil
 }
 
+func (s *LetoSuite) setArtemis(version leto.AVersion) {
+	switch version {
+	case leto.ARTEMIS_UNSUPPORTED:
+		os.Setenv("MOCK_ARTEMIS_VERSION", "")
+		artemisCommandName = "artemis"
+	case leto.ARTEMIS_0_4:
+		os.Setenv("MOCK_ARTEMIS_VERSION", "0.4")
+		artemisCommandName = "./mock_main/artemis/artemis"
+	case leto.ARTEMIS_0_5:
+		os.Setenv("MOCK_ARTEMIS_VERSION", "0.5")
+		artemisCommandName = "./mock_main/artemis/artemis"
+	}
+}
+
 func (s *LetoSuite) SetUpSuite(c *C) {
 	dir := c.MkDir()
 	datadir := filepath.Join(dir, "data")
@@ -43,7 +57,6 @@ func (s *LetoSuite) SetUpSuite(c *C) {
 	xdg.Reload()
 	c.Check(xdg.DataHome, Equals, datadir)
 	c.Check(os.TempDir(), Equals, tmpdir)
-	artemisCommandName = "./mock_main/artemis/artemis"
 	if checkFFMpeg() == false {
 		ffmpegCommandName = "./mock_main/ffmpeg/ffmpeg"
 	}
@@ -54,22 +67,30 @@ func (s *LetoSuite) TearDownSuite(c *C) {
 	os.Setenv("XDG_DATA_HOME", s.xdgDataHome)
 	os.Setenv("TMPDIR", s.tmpdir)
 	xdg.Reload()
-	artemisCommandName = "artemis"
+	s.setArtemis(leto.ARTEMIS_UNSUPPORTED)
 	ffmpegCommandName = "ffmpeg"
 	coaxlinkFirmwareCommandName = "coaxlink-firmware"
 }
 
-func (s *LetoSuite) SetUpTest(c *C) {
+func (s *LetoSuite) setUpTest(c *C, version leto.AVersion) bool {
+	s.setArtemis(version)
 	var err error
 	s.l, err = NewLeto(leto.DefaultConfig)
-	c.Check(err, IsNil)
+	return c.Check(err, IsNil) && c.Check(s.l, Not(IsNil))
 }
 
 func (s *LetoSuite) TearDownTest(c *C) {
+	if s.l == nil {
+		return
+	}
 	s.l.Stop(context.Background())
+	s.l = nil
 }
 
 func (s *LetoSuite) TestAlreadyStopped(c *C) {
+	if s.setUpTest(c, leto.ARTEMIS_0_5) == false {
+		return
+	}
 	c.Check(s.l.Stop(context.Background()), ErrorMatches, "already stopped")
 }
 
@@ -98,6 +119,9 @@ func (s *LetoSuite) waitFrames(n int) error {
 }
 
 func (s *LetoSuite) TestTestMode(c *C) {
+	if s.setUpTest(c, leto.ARTEMIS_0_5) == false {
+		return
+	}
 	c.Check(s.l.LastExperimentLog(), IsNil)
 	conf := &leto.TrackingConfiguration{
 		Camera: leto.CameraConfiguration{
@@ -158,7 +182,11 @@ func (s *LetoSuite) readAllFrames(experimentDir string) ([]*hermes.FrameReadout,
 	}
 }
 
-func (s *LetoSuite) TestE2E(c *C) {
+func (s *LetoSuite) TestE2E_artemis_0_4(c *C) {
+	if s.setUpTest(c, leto.ARTEMIS_0_4) == false {
+		return
+	}
+
 	conf := &leto.TrackingConfiguration{
 		ExperimentName: "test-e2e",
 		Camera: leto.CameraConfiguration{
@@ -193,7 +221,42 @@ func (s *LetoSuite) TestE2E(c *C) {
 	c.Check(mtype.Is("video/mp4"), Equals, true)
 }
 
+func (s *LetoSuite) TestE2E_artemis_0_5(c *C) {
+	if s.setUpTest(c, leto.ARTEMIS_0_5) == false {
+		return
+	}
+
+	conf := &leto.TrackingConfiguration{
+		ExperimentName: "test-e2e",
+		Camera: leto.CameraConfiguration{
+			FPS: newWithValue(100.0),
+		},
+	}
+
+	c.Check(s.l.LastExperimentLog(), IsNil)
+
+	c.Assert(s.l.Start(context.Background(), conf), IsNil)
+
+	c.Check(s.waitFrames(15), IsNil)
+
+	c.Check(s.l.Stop(context.Background()), IsNil)
+	log := s.l.LastExperimentLog()
+	c.Assert(log, Not(IsNil))
+	c.Check(log.HasError, Equals, false)
+
+	// now check we got at least 15 frame saved in the experiment
+	f, err := s.readAllFrames(log.ExperimentDir)
+	c.Check(err, IsNil)
+	c.Check(len(f) >= 15, Equals, true)
+
+	// we are not testing the video file generation, it is now the responsability of artemis.
+}
+
 func (s *LetoSuite) TestArtemisFailure(c *C) {
+	if s.setUpTest(c, leto.ARTEMIS_0_5) == false {
+		return
+	}
+
 	conf := &leto.TrackingConfiguration{
 		ExperimentName: "detection-will-fail",
 		Detection: leto.TagDetectionConfiguration{
@@ -212,6 +275,10 @@ func (s *LetoSuite) TestArtemisFailure(c *C) {
 }
 
 func (s *LetoSuite) TestCanCheckVersion(c *C) {
+	if s.setUpTest(c, leto.ARTEMIS_0_5) == false {
+		return
+	}
+
 	testdata := []struct {
 		Version         string
 		ExpectedVersion leto.AVersion
