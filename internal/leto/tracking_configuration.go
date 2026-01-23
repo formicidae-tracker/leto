@@ -55,15 +55,15 @@ func MergeConfiguration(from, to interface{}) error {
 }
 
 type QuadDetectionConfiguration struct {
-	Decimate        *float64 `long:"at-quad-decimate" description:"Decimate quads (recommended:1.0)" yaml:"decimate"`
-	Sigma           *float64 `long:"at-quad-sigma" description:"Blur before finding quads (recommended:0.0)" yaml:"sigma"`
-	RefineEdges     *bool    `long:"at-refine-edges" description:"Refine edges once a quad is found (not recommended)" yaml:"refine-edges"`
-	MinClusterPixel *int     `long:"at-quad-min-cluster" description:"Minimum numbe rof pixel to consider a quad (recommended:25)"  yaml:"min-cluster-pixel"`
-	MaxNMaxima      *int     `long:"at-quad-max-n-maxima" description:"Maximum number of corner to consider when fitting a quad (recommended:10)" yaml:"max-n-maxima"`
-	CriticalRadian  *float64 `long:"at-quad-critical-radian" description:"Minimal angle for a quad corner (recommended:10°)" yaml:"critical-angle-radian"`
-	MaxLineMSE      *float64 `long:"at-quad-max-line-mse" description:"Maximal MSE for a line fit (recommended:10.0)" yaml:"max-line-mean-square-error"`
-	MinBWDiff       *int     `long:"at-quad-min-bw-diff" description:"Minimum local threshold to consider a black/white border (recommended:50)" yaml:"min-black-white-diff"`
-	Deglitch        *bool    `long:"at-quad-deglitch" description:"Enables quad deglitching euristics (not recommended)" yaml:"deglitch"`
+	Decimate        *float64 `long:"quad-decimate" description:"Decimate quads (recommended:1.0)" yaml:"decimate"`
+	Sigma           *float64 `long:"quad-sigma" description:"Blur before finding quads (recommended:0.0)" yaml:"sigma"`
+	RefineEdges     *bool    `long:"refine-edges" description:"Refine edges once a quad is found (not recommended)" yaml:"refine-edges"`
+	MinClusterPixel *int     `long:"quad-min-cluster" description:"Minimum numbe rof pixel to consider a quad (recommended:25)"  yaml:"min-cluster-pixel"`
+	MaxNMaxima      *int     `long:"quad-max-n-maxima" description:"Maximum number of corner to consider when fitting a quad (recommended:10)" yaml:"max-n-maxima"`
+	CriticalRadian  *float64 `long:"quad-critical-radian" description:"Minimal angle for a quad corner (recommended:10°)" yaml:"critical-angle-radian"`
+	MaxLineMSE      *float64 `long:"quad-max-line-mse" description:"Maximal MSE for a line fit (recommended:10.0)" yaml:"max-line-mean-square-error"`
+	MinBWDiff       *int     `long:"quad-min-bw-diff" description:"Minimum local threshold to consider a black/white border (recommended:50)" yaml:"min-black-white-diff"`
+	Deglitch        *bool    `long:"quad-deglitch" description:"Enables quad deglitching euristics (not recommended)" yaml:"deglitch"`
 }
 
 func RecommendedQuadDetectionConfiguration() QuadDetectionConfiguration {
@@ -96,7 +96,7 @@ func (from *QuadDetectionConfiguration) Merge(to *QuadDetectionConfiguration) er
 }
 
 type TagDetectionConfiguration struct {
-	Family *string                    `long:"at-family" description:"tag family to use. Usual values are 36h11, 36h10, 36ARTag, Standard41H12" yaml:"family"`
+	Family *string                    `long:"family" description:"tag family to use. Usual values are 36h11, 36h10, 36ARTag, Standard41H12" yaml:"family"`
 	Quad   QuadDetectionConfiguration `yaml:"quad"`
 }
 
@@ -118,9 +118,9 @@ func (from *TagDetectionConfiguration) Merge(to *TagDetectionConfiguration) erro
 
 type CameraConfiguration struct {
 	StrobeDelay    *time.Duration `long:"strobe-delay" description:"delay of the strobe signal (recommended:0us)" yaml:"strobe-delay"`
-	StrobeDuration *time.Duration `long:"strobe-duration" description:"duration of the strobe signal (recommended:1500us)" yaml:"strobe-duration"`
+	StrobeDuration *time.Duration `long:"strobe" description:"duration of the strobe signal (recommended:1500us)" yaml:"strobe-duration"`
 	FPS            *float64       `short:"f" long:"fps" description:"FPS to use for the experiment (recommended:8.0)" yaml:"fps"`
-	StubPaths      *[]string      `long:"stub-image-paths" yaml:"stub-image-paths"`
+	StubPaths      *[]string      `long:"stub-images" yaml:"stub-image-paths"`
 }
 
 func RecommendedCameraConfiguration() CameraConfiguration {
@@ -142,13 +142,13 @@ func (from *CameraConfiguration) Merge(to *CameraConfiguration) error {
 }
 
 type VideoConfiguration struct {
-	Host            *string  `long:"video-stream-host" description:"host to stream to " yaml:"host"`
+	Host            *string  `long:"host" description:"host to stream to " yaml:"host"`
 	BitRateKB       *int     `long:"video-bitrate" description:"Constant encoding bitrate to use in kb/s (recommended:2000)" yaml:"bitrate"`
-	BitRateMaxRatio *float64 `long:"video-bitrate-max-ratio" description:"Constraint on the max ratio for bitrate encoding" yaml:"bitrate-max-ratio"`
-	Height          *int     `long:"video-height" description:"Video height to archive on disk" yaml:"height"`
-	StreamHeight    *int     `long:"video-stream-height" description:"Video height to stream to host" yaml:"stream-height"`
-	StreamBitrateKB *int     `long:"video-stream-bitrate" description:"Video stream bitrate in kb/s" yaml:"stream-bitrate"`
-	NoTimeOverlay   *bool    `long:"video-no-time-overlay" description:"Do not add a time overlay on archived video" yaml:"no-time-overlay"`
+	BitRateMaxRatio *float64 `long:"bitrate-max-ratio" description:"Constraint on the max ratio for bitrate encoding" yaml:"bitrate-max-ratio"`
+	Height          *int     `long:"height" description:"Video height to archive on disk" yaml:"height"`
+	StreamHeight    *int     `long:"stream-height" description:"Video height to stream to host" yaml:"stream-height"`
+	StreamBitrateKB *int     `long:"stream-bitrate" description:"Video stream bitrate in kb/s" yaml:"stream-bitrate"`
+	NoTimeOverlay   *bool    `long:"no-timestamp-overlay" description:"Do not add a time overlay on archived video" yaml:"no-time-overlay"`
 }
 
 func RecommendedStreamConfiguration() VideoConfiguration {
@@ -187,9 +187,9 @@ type TrackingConfiguration struct {
 	LegacyMode          *bool                     `long:"legacy-mode" description:"Produces a legacy mode data output" yaml:"legacy-mode"`
 	NewAntOutputROISize *int                      `long:"new-ant-size" description:"Size of the image when a new ant is found (recommended:600)" yaml:"new-ant-roi"`
 	NewAntRenewPeriod   *time.Duration            `long:"image-renew-period" description:"Period to renew ant snapshot (recommended:2h)" yaml:"image-renew-period"`
-	Video               VideoConfiguration        `yaml:"video"`
-	Camera              CameraConfiguration       `yaml:"camera"`
-	Detection           TagDetectionConfiguration `yaml:"apriltag"`
+	Video               VideoConfiguration        `yaml:"video" group:"video output" namespace:"video-output"`
+	Camera              CameraConfiguration       `yaml:"camera" group:"camera" namespace:"camera"`
+	Detection           TagDetectionConfiguration `yaml:"apriltag" group:"apriltag" namespace:"at"`
 	Highlights          *[]int                    `yaml:"highlights"`
 	Loads               *LoadBalancing            `yaml:"load-balancing"`
 	Threads             *int                      `yaml:"threads"`
