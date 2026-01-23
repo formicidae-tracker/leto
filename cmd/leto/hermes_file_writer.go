@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -11,7 +12,6 @@ import (
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/proto"
-	"github.com/sirupsen/logrus"
 )
 
 type HermesFileWriter interface {
@@ -20,21 +20,23 @@ type HermesFileWriter interface {
 }
 
 type hermesFileWriter struct {
+	ctx                            context.Context
 	period                         time.Duration
 	basename                       string
 	lastname, lastUncompressedName string
 	file, uncompressed             *os.File
 	gzip                           *gzip.Writer
-	logger                         *logrus.Entry
+	logger                         *slog.Logger
 	incoming                       chan *hermes.FrameReadout
 }
 
 func NewFrameReadoutWriter(ctx context.Context, filepath string) (HermesFileWriter, error) {
 
 	return &hermesFileWriter{
+		ctx:      ctx,
 		period:   2 * time.Hour,
 		basename: filepath,
-		logger:   tm.NewLogger("file-writer").WithContext(ctx),
+		logger:   tm.NewLogger("file-writer"),
 		incoming: make(chan *hermes.FrameReadout, 200),
 	}, nil
 
@@ -84,10 +86,10 @@ func (w *hermesFileWriter) openFile(filename, filenameUncompressed string, width
 		return err
 	}
 	_, err = w.uncompressed.Write(b.Bytes())
-	w.logger.WithFields(logrus.Fields{
-		"compressed-file":   filename,
-		"uncompressed-file": filenameUncompressed,
-	}).Info("destination files")
+	w.logger.With(
+		slog.String("compressed-file", filename),
+		slog.String("uncompressed-file", filenameUncompressed),
+	).InfoContext(w.ctx, "destination files")
 	return err
 }
 
@@ -102,10 +104,9 @@ func (w *hermesFileWriter) closeUncompressed() error {
 	}
 
 	if err := os.RemoveAll(w.lastUncompressedName); err != nil {
-		w.logger.WithFields(logrus.Fields{
-			"file":  w.lastUncompressedName,
-			"error": err,
-		}).Error("could not remove last uncompressed segment")
+		w.logger.With(slog.String("file", w.lastUncompressedName),
+			"error", err,
+		).ErrorContext(w.ctx, "could not remove last uncompressed segment")
 	}
 
 	return nil
@@ -139,7 +140,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.WithError(err).Error("additional close error for uncompressed file")
+			w.logger.With("error", err).ErrorContext(w.ctx, "additional close error for uncompressed file")
 		}
 	}()
 	defer func() {
@@ -148,7 +149,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.WithError(err).Error("additional close error for compressed file")
+			w.logger.With("error", err).ErrorContext(w.ctx, "additional close error for compressed file")
 		}
 	}()
 	defer func() {
@@ -156,7 +157,7 @@ func (w *hermesFileWriter) closeFiles(nextFile string) (retError error) {
 		if retError == nil {
 			retError = err
 		} else if err != nil {
-			w.logger.WithError(err).Error("additional close error for GZIP stream")
+			w.logger.With("error", err).ErrorContext(w.ctx, "additional close error for GZIP stream")
 		}
 	}()
 

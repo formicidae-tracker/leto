@@ -61,7 +61,7 @@ func execute() error {
 }
 
 func printVersion() {
-	fmt.Printf("artemis %s\n", leto.ARTEMIS_MIN_VERSION)
+	fmt.Printf("artemis %s\n", leto.ARTEMIS_0_4)
 }
 
 func (o *Options) Run() error {

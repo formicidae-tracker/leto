@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +18,6 @@ import (
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -227,7 +227,7 @@ func (e *TrackingEnvironment) trackingCommandArgs_0_5() []string {
 	args = append(args, "--process.uuid="+e.Config.Loads.SelfUUID)
 
 	if *e.Config.Threads > 0 {
-		logrus.WithField("option", "Threads").Warn("unsupported tracking configuration for v0.5")
+		slog.With("option", "Threads").Warn("unsupported tracking configuration option for v0.5")
 	}
 
 	if *e.Config.LegacyMode == true {
@@ -480,11 +480,11 @@ func (e *TrackingEnvironment) buildLog(err error) *letopb.ExperimentLog {
 	}
 
 	end := time.Now()
-	log, err := ioutil.ReadFile(e.Path("artemis.INFO"))
+	log, err := os.ReadFile(e.Path("artemis.INFO"))
 	if err != nil {
 		log = append(log, []byte(fmt.Sprintf("\ncould not read log: %s", err))...)
 	}
-	stderr, err := ioutil.ReadFile(e.Path("artemis.stderr"))
+	stderr, err := os.ReadFile(e.Path("artemis.stderr"))
 	if err != nil {
 		stderr = append(stderr, []byte(fmt.Sprintf("\ncould not read stderr: %s", err))...)
 	}

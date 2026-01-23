@@ -99,15 +99,15 @@ func (h *hermesBroadcaster) unregister(id int) {
 }
 
 func (h *hermesBroadcaster) onAccept(ctx context.Context, conn net.Conn) {
-	logger := h.server.logger.WithField("address", conn.RemoteAddr())
+	logger := h.server.logger.With("address", conn.RemoteAddr())
 	defer func() {
 		if err := conn.Close(); err != nil {
-			logger.WithError(err).Error("could not close connection")
+			logger.With("error", err).ErrorContext(ctx, "could not close connection")
 		}
 	}()
 
 	if err := h.writeHeader(conn); err != nil {
-		logger.WithError(err).Error("could not write header")
+		logger.With("error", err).ErrorContext(ctx, "could not write header")
 		return
 	}
 
@@ -120,8 +120,8 @@ func (h *hermesBroadcaster) onAccept(ctx context.Context, conn net.Conn) {
 		conn.SetDeadline(time.Now().Add(h.idle))
 		_, err := conn.Write(data)
 		if err != nil {
-			logger.WithError(err).Error("could not write data")
-			logger.Warn("stopping stream early")
+			logger.With("error", err).ErrorContext(ctx, "could not write data")
+			logger.WarnContext(ctx, "stopping stream early")
 			return
 		}
 	}

@@ -5,12 +5,12 @@ import (
 	"context"
 	"flag"
 	"io"
+	"log/slog"
 	"math"
 	"math/rand"
 	"testing"
 
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
-	"github.com/sirupsen/logrus"
 	. "gopkg.in/check.v1"
 
 	"github.com/golang/protobuf/proto"
@@ -21,7 +21,7 @@ var logstostderr = flag.Bool("logstostderr", false, "leaves module log to stderr
 // Hook up gocheck into the "go test" runner.
 func Test(t *testing.T) {
 	if *logstostderr == false {
-		logrus.SetOutput(io.Discard)
+		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}
 	TestingT(t)
 }

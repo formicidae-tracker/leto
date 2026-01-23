@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -11,7 +12,6 @@ import (
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,7 +21,7 @@ import (
 type LetoGRPCWrapper struct {
 	letopb.UnimplementedLetoServer
 	leto   *Leto
-	logger *logrus.Entry
+	logger *slog.Logger
 }
 
 func (l *LetoGRPCWrapper) StartTracking(ctx context.Context, request *letopb.StartRequest) (*letopb.Empty, error) {
@@ -30,7 +30,7 @@ func (l *LetoGRPCWrapper) StartTracking(ctx context.Context, request *letopb.Sta
 		return nil, status.Errorf(codes.InvalidArgument, "could not parse configuration: %s", err)
 	}
 
-	l.logger.WithField("experiment", config.ExperimentName).Info("new start request")
+	l.logger.With(slog.String("experiment", config.ExperimentName)).InfoContext(ctx, "new start request")
 
 	err = l.leto.Start(ctx, config)
 	if err != nil {
@@ -40,7 +40,7 @@ func (l *LetoGRPCWrapper) StartTracking(ctx context.Context, request *letopb.Sta
 }
 
 func (l *LetoGRPCWrapper) StopTracking(ctx context.Context, _ *letopb.Empty) (*letopb.Empty, error) {
-	l.logger.Infof("new stop request")
+	l.logger.InfoContext(ctx, "new stop request")
 	err := l.leto.Stop(ctx)
 	if err != nil {
 		return nil, err
@@ -49,12 +49,12 @@ func (l *LetoGRPCWrapper) StopTracking(ctx context.Context, _ *letopb.Empty) (*l
 }
 
 func (l *LetoGRPCWrapper) GetStatus(ctx context.Context, _ *letopb.Empty) (*letopb.Status, error) {
-	l.logger.Trace("get status")
+	l.logger.Log(ctx, slog.Level(-8), "get status")
 	return l.leto.Status(ctx), nil
 }
 
-func (l *LetoGRPCWrapper) GetLastExperimentLog(context.Context, *letopb.Empty) (*letopb.ExperimentLog, error) {
-	l.logger.Trace("get last experiment log")
+func (l *LetoGRPCWrapper) GetLastExperimentLog(ctx context.Context, _ *letopb.Empty) (*letopb.ExperimentLog, error) {
+	l.logger.Log(ctx, slog.Level(-8), "get last experiment log")
 
 	last := l.leto.LastExperimentLog()
 	if last == nil {
@@ -197,15 +197,15 @@ func (l *LetoGRPCWrapper) Run(config leto.Config) error {
 		self := zeroconf.NewService(zcType, host, uint16(l.leto.leto.LetoPort))
 		client, err := zeroconf.New().Publish(self).Open()
 		if err != nil {
-			l.logger.WithError(err).Error("mDNS Service configuration failure")
+			l.logger.With("error", err).Error("mDNS Service configuration failure")
 		}
-		l.logger.WithFields(logrus.Fields{"host": host}).Info("mDNS published started")
+		l.logger.With(slog.String("host", host)).Info("mDNS published started")
 
 		<-ctx.Done()
 		client.Close()
 	}()
 
-	l.logger.WithField("address", addr).Info("listening")
+	l.logger.With(slog.String("address", addr)).Info("listening")
 
 	return server.Serve(lis)
 }

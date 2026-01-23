@@ -1,13 +1,13 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 	"os/exec"
 	"time"
 
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/sirupsen/logrus"
 )
 
 type ExperimentRunner interface {
@@ -17,7 +17,7 @@ type ExperimentRunner interface {
 type slaveRunner struct {
 	env        *TrackingEnvironment
 	artemisCmd *exec.Cmd
-	logger     *logrus.Entry
+	logger     *slog.Logger
 }
 
 func NewExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
@@ -30,7 +30,7 @@ func NewExperimentRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 func newSlaveRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	res := &slaveRunner{
 		env:    env,
-		logger: tm.NewLogger("experiment-runner").WithContext(env.Context),
+		logger: tm.NewLogger("experiment-runner"),
 	}
 	var err error
 	res.artemisCmd, err = env.SetUp()
@@ -79,15 +79,17 @@ func (r *slaveRunner) Run() (log *letopb.ExperimentLog, err error) {
 
 		// we ensure that we kill artemis if it does not comply
 		for !WaitDoneOrFunc(done, 500*time.Millisecond, func(grace time.Duration) {
-			r.logger.Warnf("killing artemis as it did not exit after %s", grace)
+			r.logger.With(
+				slog.Duration("grace", grace),
+			).WarnContext(r.env.Context, "killing artemis as it did not exit after %s")
 			if err := r.artemisCmd.Process.Kill(); err != nil {
-				r.logger.WithError(err).Error("could not kill artemis")
+				r.logger.With("error", err).ErrorContext(r.env.Context, "could not kill artemis")
 			}
 		}) {
 		}
 	}()
 
-	r.logger.Infof("started")
-	defer r.logger.Infof("done")
+	r.logger.InfoContext(r.env.Context, "started")
+	defer r.logger.InfoContext(r.env.Context, "done")
 	return nil, r.artemisCmd.Run()
 }

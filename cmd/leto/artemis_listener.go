@@ -46,12 +46,12 @@ func (l *artemisListener) Run() error {
 }
 
 func (l *artemisListener) onAccept(ctx context.Context, conn net.Conn) {
-	logger := l.server.logger.WithField("address", conn.RemoteAddr())
+	logger := l.server.logger.With("address", conn.RemoteAddr())
 	logger.Info("start reading incoming frames")
 	errors := make(chan error)
 	go func() {
 		for err := range errors {
-			logger.WithError(err).Error("frame reading error")
+			logger.With("error", err).ErrorContext(ctx, "frame reading error")
 		}
 	}()
 	ReadAllFrameReadout(ctx, conn, l.outbound, errors)

@@ -11,13 +11,12 @@ require (
 	github.com/betamos/zeroconf v0.1.7
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/formicidae-tracker/hermes v0.5.6
-	github.com/formicidae-tracker/olympus v0.5.5
+	github.com/formicidae-tracker/olympus v0.5.11
 	github.com/gabriel-vasile/mimetype v1.4.2
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.3
 	github.com/google/uuid v1.3.0
 	github.com/jessevdk/go-flags v1.5.0
-	github.com/sirupsen/logrus v1.9.3
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.42.0
 	go.opentelemetry.io/otel v1.16.0
 	go.opentelemetry.io/otel/metric v1.16.0

@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/formicidae-tracker/olympus/pkg/api"
 	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -31,8 +31,9 @@ type statusAndAlarm struct {
 type olympusTask struct {
 	*olympuspb.ClientTask[*olympuspb.TrackingUpStream, *olympuspb.TrackingDownStream]
 
+	ctx      context.Context
 	incoming chan statusAndAlarm
-	logger   *logrus.Entry
+	logger   *slog.Logger
 }
 
 func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask, error) {
@@ -63,21 +64,22 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 	address := fmt.Sprintf("%s:%d", *target, env.Leto.OlympusPort)
 
 	res := &olympusTask{
+		ctx: ctx,
 		ClientTask: olympuspb.NewTrackingTask(
 			ctx, address, declaration, api.WithDialOptions(options...)),
 		incoming: incoming,
-		logger:   tm.NewLogger("olympus-registration").WithContext(ctx),
+		logger:   tm.NewLogger("olympus-registration"),
 	}
 
 	go func() {
 		for connection := range res.ClientTask.Confirmations() {
 			if connection.Error != nil {
-				res.logger.WithError(connection.Error).Error("connection error")
+				res.logger.With("error", connection.Error).ErrorContext(ctx, "connection error")
 			} else {
-				res.logger.Info("connected")
+				res.logger.InfoContext(ctx, "connected")
 				resp := <-res.ClientTask.Request(res.failureAlarm(nil))
 				if resp.Error != nil {
-					res.logger.WithError(resp.Error).Error("failure alarm off")
+					res.logger.With("error", resp.Error).ErrorContext(ctx, "failure alarm off")
 				}
 			}
 		}
@@ -103,7 +105,7 @@ func (t *olympusTask) PushDiskStatus(status *olympuspb.DiskStatus, update *olymp
 	go func() {
 		res := <-response
 		if res.Error != nil {
-			t.logger.WithError(res.Error).Error("could not push update to olympus")
+			t.logger.With("error", res.Error).ErrorContext(t.ctx, "could not push update to olympus")
 		}
 	}()
 }
@@ -112,7 +114,7 @@ func (t *olympusTask) Fatal(err error) {
 	if err != nil {
 		resp := <-t.ClientTask.Request(t.failureAlarm(err))
 		if resp.Error != nil {
-			t.logger.WithError(resp.Error).Error("could not log failure to olympus")
+			t.logger.With("error", resp.Error).ErrorContext(t.ctx, "could not log failure to olympus")
 		}
 		t.ClientTask.Fatal(err)
 	}

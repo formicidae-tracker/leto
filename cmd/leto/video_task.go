@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path"
@@ -17,7 +18,6 @@ import (
 	"github.com/atuleu/go-humanize"
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -184,7 +184,8 @@ type videoTask struct {
 
 	frameCorrespondance *os.File
 
-	logger *logrus.Entry
+	ctx    context.Context
+	logger *slog.Logger
 	meter  metric.Meter
 }
 
@@ -195,7 +196,8 @@ func NewVideoManager(ctx context.Context, basedir string, fps float64, config le
 	}
 	res := &videoTask{
 		config: conf,
-		logger: tm.NewLogger("video").WithContext(ctx),
+		ctx:    ctx,
+		logger: tm.NewLogger("video"),
 		meter:  otel.Meter(instrumentationName),
 	}
 	if err := res.Check(); err != nil {
@@ -303,7 +305,7 @@ func (s *videoTask) startCommand(cmd *FFMpegCommand, commandName string) (<-chan
 		defer close(done)
 
 		if err := cmd.Wait(); err != nil {
-			s.logger.Printf("%s ffmpeg command failed: %s", commandName, err)
+			s.logger.With("error", err, slog.String("command", commandName)).ErrorContext(s.ctx, "ffmpeg command failed")
 		}
 	}()
 	return done, nil
@@ -344,15 +346,18 @@ func (s *videoTask) startTasks() error {
 
 		n, err := s.copyRoutine()
 		if err != nil {
-			s.logger.Printf("could not tranfer data between tasks: %s", err)
+			s.logger.With("error", err).ErrorContext(s.ctx, "could not tranfer data between tasks")
 		}
-		s.logger.WithField("bytes", n).Infof("copied  %s", humanize.ByteSize(n))
+		s.logger.With(
+			slog.Int64("bytes", n),
+			slog.String("amout", humanize.ByteSize(n).String()),
+		).InfoContext(s.ctx, "total copied")
 	}()
 
 	if len(s.config.destAddress) > 0 {
-		s.logger.Printf("starting streaming to %s", s.config.destAddress)
+		s.logger.With(slog.String("dest", s.config.destAddress)).InfoContext(s.ctx, "starting streaming")
 	}
-	s.logger.Printf("starting saving to %s", filenames.movie)
+	s.logger.With(slog.String("filepath", filenames.movie)).InfoContext(s.ctx, "starting archiving")
 
 	s.encodeDone, err = s.startCommand(s.encodeCmd, "encode")
 	if err != nil {
@@ -376,7 +381,7 @@ func (s *videoTask) stopTasks() {
 	if s.encodeCmd == nil {
 		return
 	}
-	s.logger.Printf("stopping video tasks")
+	s.logger.InfoContext(s.ctx, "stopping video tasks")
 	s.encodeCmd.Stdin().Close() // it should nicely close all tasks
 }
 
@@ -393,9 +398,15 @@ func (s *videoTask) waitOrKill(cmd *FFMpegCommand, done <-chan struct{}, name st
 		return
 	case <-timer.C:
 	}
-	s.logger.Printf("killing %s ffmpeg as it did not stop after %s", name, grace)
+	s.logger.With(
+		slog.String("name", name),
+		slog.Duration("period", grace),
+	).WarnContext(s.ctx, "killing ffmpeg as it did not stop after grace period")
 	if err := cmd.Kill(); err != nil {
-		s.logger.Printf("could not kill %s ffmpeg: %s", name, err)
+		s.logger.With(
+			"error", err,
+			slog.String("name", name),
+		).ErrorContext(s.ctx, "could not kill ffmpeg")
 	}
 }
 
@@ -422,7 +433,7 @@ func (s *videoTask) waitTasks() {
 func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 	defer func() {
 		if retError != nil {
-			s.logger.Printf("failed with error: %s", retError)
+			s.logger.With("error", retError).ErrorContext(s.ctx, "run failed")
 			muxed.Close()
 		}
 		s.stopTasks()
@@ -461,7 +472,7 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 			}
 
 			if headerError == 0 {
-				s.logger.Printf("cannot read header: %s", err)
+				s.logger.With("error", err).ErrorContext(s.ctx, "cannot read header")
 			}
 			headerError += 1
 			if headerError >= maxHeaderTrials {
@@ -471,7 +482,9 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 		}
 
 		if headerError != 0 {
-			s.logger.Printf("header read error repeated %d time(s)", headerError)
+			s.logger.With(
+				slog.Int("count", headerError),
+			).WarnContext(s.ctx, "header read error(s) before valid header")
 			headerError = 0
 		}
 
@@ -501,7 +514,7 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 		fmt.Fprintf(s.frameCorrespondance, "%d %d\n", currentFrame, actual)
 		_, err = io.CopyN(s.encodeCmd.Stdin(), muxed, int64(3*width*height))
 		if err != nil {
-			s.logger.Printf("cannot copy frame: %v", err)
+			s.logger.With("error", err).ErrorContext(s.ctx, "cannot copy frame")
 			frameWriteError += 1
 			if frameWriteError >= maxFrameRetries {
 				return fmt.Errorf("stop after encode copy error: %w", err)
@@ -515,12 +528,14 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 
 		now := time.Now()
 		if now.After(nextFile) == true {
-			s.logger.Printf("creating new film segment after %s", s.config.period)
+			s.logger.With(
+				slog.Duration("period", s.config.period),
+			).InfoContext(s.ctx, "creating new film segment")
 
 			s.stopTasks()
 			s.waitTasks()
 
-			s.logger.WithField("frames", currentFrame).Info("frame written")
+			s.logger.With(slog.Int("count", currentFrame)).Info("frame written in last segment")
 		}
 	}
 

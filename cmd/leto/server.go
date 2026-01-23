@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/sirupsen/logrus"
 )
 
 // A server is a simple tcp server following the Task interface. It
@@ -20,19 +20,19 @@ type Server struct {
 	ctx         context.Context
 
 	listener net.Listener
-	logger   *logrus.Entry
+	logger   *slog.Logger
 
 	onAccept func(context.Context, net.Conn)
 }
 
 func NewServer(ctx context.Context, port int, domain string, grace time.Duration) (*Server, error) {
-	logger := tm.NewLogger(domain).WithContext(ctx)
+	logger := tm.NewLogger(domain)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
-	logger.Printf("started listening on :%d", port)
+	logger.With(slog.Int("port", port)).InfoContext(ctx, "started listening")
 
 	s := &Server{
 		ctx:      ctx,
@@ -43,7 +43,7 @@ func NewServer(ctx context.Context, port int, domain string, grace time.Duration
 
 	go func() {
 		<-ctx.Done()
-		s.logger.Printf("stop listening on :%d", port)
+		s.logger.With(slog.Int("port", port)).InfoContext(ctx, "stop listening")
 		s.gracefulStop(grace)
 	}()
 
@@ -52,18 +52,18 @@ func NewServer(ctx context.Context, port int, domain string, grace time.Duration
 
 func (s *Server) gracefulStop(grace time.Duration) {
 	if err := s.listener.Close(); err != nil {
-		s.logger.Printf("closing error: %s", err)
+		s.logger.With("error", err).ErrorContext(s.ctx, "closing error")
 	}
 
 	if s.waitAllDone(grace) == true {
 		return
 	}
 
-	s.logger.Printf("force closing remaining connections")
+	s.logger.WarnContext(s.ctx, "force closing remaining connections")
 
 	s.connections.Range(func(key, value any) bool {
 		if err := value.(net.Conn).Close(); err != nil {
-			s.logger.Printf("connection closing error: %s", err)
+			s.logger.With("error", err).ErrorContext(s.ctx, "connection closing error")
 		}
 		return true
 	})
@@ -77,7 +77,7 @@ func (s *Server) waitAllDone(grace time.Duration) bool {
 	case <-done:
 		return true
 	case <-time.After(grace):
-		s.logger.Printf("grace (%s) expired", grace)
+		s.logger.With(slog.Duration("period", grace)).WarnContext(s.ctx, "grace expired")
 		return false
 	}
 }

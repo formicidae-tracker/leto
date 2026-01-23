@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -12,7 +13,6 @@ import (
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/leto/pkg/letopb"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/constraints"
 )
@@ -38,7 +38,7 @@ type masterRunner struct {
 	artemisOut, videoIn *os.File
 
 	subtasks map[string]<-chan error
-	logger   *logrus.Entry
+	logger   *slog.Logger
 }
 
 func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
@@ -58,13 +58,15 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		otherCtx:           otherCtx,
 		cancelLocalTracker: cancelTracker,
 		cancelOthers:       cancelOther,
-		logger:             tm.NewLogger("runner").WithContext(env.Context),
+		logger:             tm.NewLogger("runner"),
 		artemisStarted:     make(chan struct{}),
 		killingGrace:       500 * time.Millisecond,
 	}
 	if env.Config.Camera.FPS != nil {
 		res.killingGrace = max(res.killingGrace, time.Duration(2.0*time.Second.Seconds() / *env.Config.Camera.FPS)*time.Second)
-		res.logger.WithField("timeout", res.killingGrace).Info("killing grace setting")
+		res.logger.With(
+			slog.Duration("timeout", res.killingGrace),
+		).InfoContext(res.env.Context, "killing grace setting")
 	}
 
 	if err := res.SetUp(); err != nil {
@@ -119,7 +121,7 @@ func (r *masterRunner) SetUp() error {
 
 	r.olympus, err = NewOlympusTask(r.otherCtx, r.env)
 	if err != nil {
-		r.logger.WithError(err).Error("will not register to olympus")
+		r.logger.With("error", err).ErrorContext(r.env.Context, "will not register to olympus")
 	}
 
 	return nil
@@ -148,10 +150,12 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 
 		// if already terminated, will do nothing (artemis crashed before signal).
 		for !WaitDoneOrFunc(r.otherCtx.Done(), r.killingGrace, func(grace time.Duration) {
-			r.logger.Warnf("killing artemis as it did not terminate after %s", grace)
+			r.logger.With(
+				slog.Duration("grace", grace),
+			).WarnContext(r.env.Context, "killing artemis as it did not terminate after %s")
 			r.cancelOthers() // to avoid to mark X timeout while we wait for termination
 			if err := r.artemisCmd.Process.Kill(); err != nil {
-				r.logger.WithError(err).Error("could not kill artemis")
+				r.logger.With("error", err).ErrorContext(r.env.Context, "could not kill artemis")
 			}
 		}) {
 		}
@@ -264,7 +268,7 @@ func (r *masterRunner) waitForLocalTracker() error {
 	}
 
 	if cerr := r.artemisOut.Close(); cerr != nil {
-		r.logger.WithError(err).Warn("could not close artemis out pipe")
+		r.logger.With("error", err).WarnContext(r.env.Context, "could not close artemis out pipe")
 	}
 	return err
 }
@@ -273,8 +277,8 @@ func (r *masterRunner) stopAllOtherSubtasks() {
 	if r.artemisOut != nil {
 		err := r.artemisOut.Close()
 		if err != nil {
-			r.logger.WithError(err).
-				Warn("could not kill artemis out pipe while cancelling other substasks")
+			r.logger.With("error", err).
+				WarnContext(r.env.Context, "could not kill artemis out pipe while cancelling other substasks")
 		}
 	}
 	r.cancelOthers()
@@ -304,19 +308,18 @@ func (r *masterRunner) waitAllSubtasks() {
 					stop = true
 				case <-time.After(delay):
 					total += delay
-					r.logger.WithFields(logrus.Fields{
-						"task":  name,
-						"after": total,
-					}).Warn("task still running ")
+					r.logger.With(slog.String("task", name),
+						slog.Duration("after", total),
+					).WarnContext(r.env.Context, "task still running ")
 					delay = Min(2*delay, 10*time.Second)
 				}
 			}
 
 			if err != nil {
 				r.logger.
-					WithField("task", name).
-					WithError(err).
-					Error("task terminated with error")
+					With(slog.String("task", name),
+						"error", err).
+					ErrorContext(r.env.Context, "task terminated with error")
 			}
 		}(n, t)
 	}
@@ -331,13 +334,16 @@ func (r *masterRunner) startSlaves() {
 	nl := leto.NewNodeLister()
 	nodes, err := nl.ListNodes()
 	if err != nil {
-		r.logger.Printf("could not list local nodes: %s", err)
+		r.logger.With("error", err).ErrorContext(r.env.Context, "could not list local nodes")
 		return
 	}
 
 	for _, name := range r.env.Node.Slaves {
 		if err := r.startSlave(nodes, name); err != nil {
-			r.logger.Printf("could not start slave %s: %s", name, err)
+			r.logger.With(
+				"error", err,
+				slog.String("name", name),
+			).ErrorContext(r.env.Context, "could not start slave")
 		}
 	}
 }
@@ -349,13 +355,16 @@ func (r *masterRunner) stopSlaves() {
 	nl := leto.NewNodeLister()
 	nodes, err := nl.ListNodes()
 	if err != nil {
-		r.logger.Printf("could not list local nodes: %s", err)
+		r.logger.With("error", err).ErrorContext(r.env.Context, "could not list local nodes")
 		return
 	}
 
 	for _, name := range r.env.Node.Slaves {
 		if err := r.stopSlave(nodes, name); err != nil {
-			r.logger.Printf("could not stop slave %s: %s", name, err)
+			r.logger.With(
+				"error", err,
+				slog.String("name", name),
+			).ErrorContext(r.env.Context, "could not stop slave")
 		}
 	}
 }

@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/jessevdk/go-flags"
-	"github.com/sirupsen/logrus"
 )
 
 type Options struct {
@@ -54,11 +53,11 @@ func setUpLogger() {
 	var err error
 	defer func() {
 		if err != nil {
-			logrus.WithError(err).Error("could not load telemetry config file")
+			slog.With("error", err).Error("could not load telemetry config file")
 		}
 	}()
 
-	content, err := ioutil.ReadFile(telemetryConfigPath())
+	content, err := os.ReadFile(telemetryConfigPath())
 	if err != nil {
 		if os.IsNotExist(err) == true {
 			err = nil
