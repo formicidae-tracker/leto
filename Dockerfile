@@ -1,4 +1,4 @@
-FROM golang:1.24-trixie as build
+FROM golang:1.24-trixie AS build
 
 WORKDIR /app
 
@@ -14,18 +14,10 @@ RUN go build
 
 FROM ghcr.io/formicidae-tracker/artemis:0.5.0-rc1
 
-# RUN apt-get update && apt-get install -y ffmpeg
+RUN apt-get update && apt-get install -y vainfo gstreamer1.0-tools
+
+COPY --from=build /app/cmd/leto/leto /usr/local/bin/leto
 
 WORKDIR /app
 
-COPY --from=build /app/cmd/leto/leto ./leto
-
-RUN groupadd -g 1001 fort-user
-
-RUN useradd -d /home/fort-user -s /bin/sh -m fort-user -u 1001 -g 1001
-
-USER fort-user
-
-ENV HOME /home/fort-user
-
-ENTRYPOINT [ "./leto" ]
+CMD [ "/usr/local/bin/leto" ]

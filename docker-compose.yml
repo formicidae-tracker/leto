@@ -4,22 +4,29 @@ services:
       context: .
     extra_hosts:
       - olympus-dev.local:host-gateway
-      - signoz:host-gateway
+      # - signoz:host-gateway
     devices:
-      - /dev/dri/card1
-    ipc: host
+      - /dev/dri:/dev/dri
     network_mode: host
     volumes:
-      - ./frames:/data
+      - .:/data/fort-user
       - /tmp/.X11-unix:/tmp/.X11-unix
       - $HOME/.Xauthority:/home/fort-user/.Xauthority
+      - $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/data/$WAYLAND_DISPLAY
+    working_dir: /data/fort-user
+    user: $UID:$GID
     command:
+      - /usr/local/bin/leto
       - --dev
       - -vv
     environment:
+      - XDG_SESSION_TYPE
+      - XDG_RUNTIME_DIR=/data
+      - WAYLAND_DISPLAY
       - DISPLAY
+
       # - LETO_OTEL_ENDPOINT=signoz:4317
-    ports:
-      - "4000:4000" # gRPC
-      - "4001:4001" # trackers, if using master slave.
-      - "4002:4002" # Broadcast
+#    ports:
+#      - "4000:4000" # gRPC
+#      - "4001:4001" # trackers, if using master slave.
+#      - "4002:4002" # Broadcast
