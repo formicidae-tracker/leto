@@ -494,6 +494,12 @@ func (e *TrackingEnvironment) buildLog(err error) *letopb.ExperimentLog {
 		yaml = []byte(fmt.Sprintf("could not generate yaml config: %s", err))
 	}
 
+	var environ []string = nil
+	data, err := os.ReadFile(e.Path("artemis.environ"))
+	if err == nil {
+		environ = strings.Split(string(data), "\n")
+	}
+
 	return &letopb.ExperimentLog{
 		HasError:          hasError,
 		Error:             errorDescription,
@@ -503,6 +509,7 @@ func (e *TrackingEnvironment) buildLog(err error) *letopb.ExperimentLog {
 		YamlConfiguration: string(yaml),
 		Log:               string(log),
 		Stderr:            string(stderr),
+		Environment:       environ,
 	}
 }
 
@@ -518,4 +525,27 @@ func (e *TrackingEnvironment) WatchDisk(now time.Time) (free int64, total int64,
 	bps = e.Rate.Estimate(free, now)
 
 	return free, total, bps, nil
+}
+
+func (e *TrackingEnvironment) DumpEnv() {
+	// prints environment to "e.ExperimentDir / artemis.environ" file
+	fpath := e.Path("artemis.environ")
+	logger := slog.With(slog.String("filepath", fpath))
+	f, err := os.Create(fpath)
+	if err != nil {
+		logger.Error("could not create file to dump environment",
+			slog.String("error", err.Error()))
+		return
+	}
+	defer f.Close()
+
+	cmd := exec.Command("env")
+	cmd.Stderr = f
+	cmd.Stdout = f
+	if err := cmd.Run(); err != nil {
+		logger.Error("could not print environment",
+			slog.String("error", err.Error()))
+	} else {
+		logger.Info("environment saved")
+	}
 }

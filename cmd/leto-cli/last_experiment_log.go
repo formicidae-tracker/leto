@@ -17,6 +17,7 @@ type LastExperimentLogCommand struct {
 	Log           bool `short:"l" long:"log" description:"print artemis logs"`
 	Stderr        bool `short:"e" long:"stderr" description:"print artemis stderr (for checking segfaults)"`
 	Configuration bool `short:"c" long:"configuration" description:"print the experiment configuration"`
+	Environment   bool `short:"E" long:"env" description:"print environment"`
 }
 
 var lastExperimentCommand = &LastExperimentLogCommand{}
@@ -45,14 +46,14 @@ func (c *LastExperimentLogCommand) printSummary(name string, log *letopb.Experim
 }
 
 func (c *LastExperimentLogCommand) None() bool {
-	return (c.All || c.Log || c.Configuration || c.Stderr) == false
+	return (c.All || c.Log || c.Configuration || c.Stderr || c.Environment) == false
 }
 
 func (c *LastExperimentLogCommand) MultipleSections() bool {
 	if c.All == true {
 		return true
 	}
-	sections := []bool{c.Configuration, c.Log, c.Stderr}
+	sections := []bool{c.Configuration, c.Log, c.Stderr, c.Environment}
 	count := 0
 	for _, s := range sections {
 		if s == true {
@@ -94,6 +95,14 @@ func (c *LastExperimentLogCommand) printStderr(log *letopb.ExperimentLog) {
 	c.printFooter("Artemis STDERR")
 }
 
+func (c *LastExperimentLogCommand) printEnvironment(log *letopb.ExperimentLog) {
+	c.printHeader("Artemis ENV")
+	for _, kv := range log.Environment {
+		fmt.Println(kv)
+	}
+	c.printFooter("Artemis ENV")
+}
+
 func (c *LastExperimentLogCommand) Execute(args []string) error {
 	n, err := c.Args.Node.GetNode()
 	if err != nil {
@@ -129,6 +138,10 @@ func (c *LastExperimentLogCommand) printLog(log *letopb.ExperimentLog,
 
 	if c.All || c.Log {
 		c.printArtemisLog(log)
+	}
+
+	if c.All || c.Environment {
+		c.printEnvironment(log)
 	}
 
 	if c.All || c.Stderr {

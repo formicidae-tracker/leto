@@ -20,6 +20,7 @@ var testlog = &letopb.ExperimentLog{
 	End:           timestamppb.New(time.Date(2023, 4, 24, 18, 12, 01, 0, time.UTC)),
 	HasError:      true,
 	Error:         "Something critical happened",
+	Environment:   []string{"DISPLAY=:1"},
 }
 
 func ExampleLastExperimentLogCommand_summary() {
@@ -42,6 +43,11 @@ func ExampleLastExperimentLogCommand_log() {
 func ExampleLastExperimentLogCommand_stderr() {
 	(&LastExperimentLogCommand{Stderr: true}).printLog(testlog, testconfig)
 	//Output: artemis stderr
+}
+
+func ExampleLastExperimentLogCommand_environment() {
+	(&LastExperimentLogCommand{Environment: true}).printLog(testlog, testconfig)
+	//Output: DISPLAY=:1
 }
 
 func ExampleLastExperimentLogCommand_config() {
@@ -134,6 +140,12 @@ func ExampleLastExperimentLogCommand_all() {
 	// artemis log
 	//
 	// === End of Artemis INFO Log ===
+	//
+	// === Artemis ENV ===
+	//
+	// DISPLAY=:1
+	//
+	// === End of Artemis ENV ===
 	//
 	// === Artemis STDERR ===
 	//

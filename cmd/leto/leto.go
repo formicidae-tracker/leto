@@ -254,6 +254,11 @@ func (l *Leto) start(ctx context.Context, user *leto.TrackingConfiguration) (err
 
 	go func() {
 		logger.InfoContext(ctx, "starting experiment")
+
+		if l.leto.DevMode == true {
+			l.env.DumpEnv()
+		}
+
 		log, err := runner.Run()
 		if err != nil {
 			logger.With("error", err).ErrorContext(ctx, "experiment failed")

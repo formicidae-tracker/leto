@@ -8,6 +8,8 @@ services:
     devices:
       - /dev/dri:/dev/dri
     network_mode: host
+    group_add:
+      - 110
     volumes:
       - .:/data/fort-user
       - /tmp/.X11-unix:/tmp/.X11-unix
@@ -24,6 +26,8 @@ services:
       - XDG_RUNTIME_DIR=/data
       - WAYLAND_DISPLAY
       - DISPLAY
+      - TERM=xterm #WUT?
+
 
       # - LETO_OTEL_ENDPOINT=signoz:4317
 #    ports:
