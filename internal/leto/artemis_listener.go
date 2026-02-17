@@ -1,4 +1,4 @@
-package main
+package leto
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func NewArtemisListener(ctx context.Context, port int) (ArtemisListener, error) 
 		outbound: make(chan *hermes.FrameReadout),
 		server:   server,
 	}
-	l.server.onAccept = l.onAccept
+	l.server.OnAccept = l.onAccept
 
 	return l, nil
 }
@@ -46,7 +46,7 @@ func (l *artemisListener) Run() error {
 }
 
 func (l *artemisListener) onAccept(ctx context.Context, conn net.Conn) {
-	logger := l.server.logger.With("address", conn.RemoteAddr())
+	logger := l.server.Logger.With("address", conn.RemoteAddr())
 	logger.Info("start reading incoming frames")
 	errors := make(chan error)
 	go func() {

@@ -198,7 +198,7 @@ func NewVideoManager(ctx context.Context, basedir string, fps float64, config le
 		config: conf,
 		ctx:    ctx,
 		logger: tm.NewLogger("video"),
-		meter:  otel.Meter(instrumentationName),
+		meter:  otel.Meter(leto.InstrumentationName),
 	}
 	if err := res.Check(); err != nil {
 		return nil, err
@@ -449,7 +449,7 @@ func (s *videoTask) Run(muxed io.ReadCloser) (retError error) {
 		counter := counters[name]
 		counter.Store(0)
 		s.meter.Int64ObservableCounter(path.Join("leto", name),
-			metric.WithInt64Callback(BuildAtomicInt64Callback(counter)),
+			metric.WithInt64Callback(leto.BuildAtomicInt64Callback(counter)),
 		)
 	}
 

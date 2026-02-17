@@ -96,7 +96,7 @@ func (s *VideoTaskSuite) TestE2E(c *C) {
 
 	in, out := io.Pipe()
 
-	errs := StartFunc(func() error { return v.Run(in) })
+	errs := leto.StartTaskFunc(func() error { return v.Run(in) })
 
 	for i := 0; i < 80; i++ {
 		writeUint64(out, i+42)

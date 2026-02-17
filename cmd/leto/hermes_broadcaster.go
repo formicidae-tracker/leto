@@ -8,18 +8,19 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
+	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/golang/protobuf/proto"
 )
 
 type HermesBroadcaster interface {
-	Task
+	leto.Task
 	Incoming() chan<- *hermes.FrameReadout
 }
 
 type hermesBroadcaster struct {
 	mx sync.RWMutex
 
-	server   *Server
+	server   *leto.Server
 	incoming chan *hermes.FrameReadout
 	outgoing map[int]chan []byte
 	idle     time.Duration
@@ -68,7 +69,7 @@ func (b *hermesBroadcaster) closeAllOutgoing() {
 }
 
 func NewHermesBroadcaster(ctx context.Context, port int, idle time.Duration) (HermesBroadcaster, error) {
-	server, err := NewServer(ctx, port, "broadcast", 1*time.Second)
+	server, err := leto.NewServer(ctx, port, "broadcast", 1*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +79,7 @@ func NewHermesBroadcaster(ctx context.Context, port int, idle time.Duration) (He
 		outgoing: make(map[int]chan []byte),
 		idle:     idle,
 	}
-	res.server.onAccept = res.onAccept
+	res.server.OnAccept = res.onAccept
 	return res, nil
 }
 
@@ -99,7 +100,7 @@ func (h *hermesBroadcaster) unregister(id int) {
 }
 
 func (h *hermesBroadcaster) onAccept(ctx context.Context, conn net.Conn) {
-	logger := h.server.logger.With("address", conn.RemoteAddr())
+	logger := h.server.Logger.With("address", conn.RemoteAddr())
 	defer func() {
 		if err := conn.Close(); err != nil {
 			logger.With("error", err).ErrorContext(ctx, "could not close connection")

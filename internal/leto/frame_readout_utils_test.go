@@ -1,4 +1,4 @@
-package main
+package leto
 
 import (
 	"bytes"
@@ -28,7 +28,7 @@ func checkReadoutEqual(c *C, obtained, expected *hermes.FrameReadout) {
 	c.Check(obtained.Cuestart, DeepEquals, expected.Cuestart)
 	c.Check(obtained.Cueend, DeepEquals, expected.Cueend)
 	c.Check(len(obtained.Tags), Equals, len(expected.Tags))
-	size := Min(len(obtained.Tags), len(expected.Tags))
+	size := min(len(obtained.Tags), len(expected.Tags))
 	for i := 0; i < size; i++ {
 		checkTagEqual(c, obtained.Tags[i], expected.Tags[i], Commentf("idx=%d", i))
 	}

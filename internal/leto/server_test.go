@@ -1,4 +1,4 @@
-package main
+package leto
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func (s *ServerSuite) SetUpTest(c *C) {
 	var err error
 	s.server, err = NewServer(ctx, 12345, "leto-tests", 20*time.Millisecond)
 	c.Assert(err, IsNil)
-	s.err = Start(s.server)
+	s.err = StartTask(s.server)
 
 }
 
@@ -54,7 +54,7 @@ func (s *ServerSuite) TestDoesNotWaitOnAllClosedConnection(c *C) {
 func (s *ServerSuite) TestClosesAllConnectionAfterGrace(c *C) {
 	connected := make(chan struct{})
 	done := make(chan struct{})
-	s.server.onAccept = func(ctx context.Context, conn net.Conn) {
+	s.server.OnAccept = func(ctx context.Context, conn net.Conn) {
 		close(connected)
 		data := make([]byte, 10)
 		_, err := conn.Read(data)

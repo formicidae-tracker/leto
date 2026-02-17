@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/olympus/pkg/api"
 	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
@@ -15,10 +16,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-//go:generate mockgen -source=olympus_task.go -aux_files github.com/formicidae-tracker/leto/cmd/leto=task.go -destination=mock_main/olympus_task.go
+//go:generate mockgen -source=olympus_task.go -aux_files github.com/formicidae-tracker/leto/internal/leto=../../internal/leto/task.go -destination=mock_main/olympus_task.go
 
 type OlympusTask interface {
-	Task
+	leto.Task
 	PushDiskStatus(*olympuspb.DiskStatus, *olympuspb.AlarmUpdate)
 	Fatal(err error)
 }

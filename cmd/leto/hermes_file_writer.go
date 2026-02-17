@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
+	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/olympus/pkg/tm"
 	"github.com/golang/protobuf/proto"
 )
 
 type HermesFileWriter interface {
-	Task
+	leto.Task
 	Incoming() chan<- *hermes.FrameReadout
 }
 

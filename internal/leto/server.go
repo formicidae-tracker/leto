@@ -1,4 +1,4 @@
-package main
+package leto
 
 import (
 	"context"
@@ -20,9 +20,9 @@ type Server struct {
 	ctx         context.Context
 
 	listener net.Listener
-	logger   *slog.Logger
+	Logger   *slog.Logger
 
-	onAccept func(context.Context, net.Conn)
+	OnAccept func(context.Context, net.Conn)
 }
 
 func NewServer(ctx context.Context, port int, domain string, grace time.Duration) (*Server, error) {
@@ -37,13 +37,13 @@ func NewServer(ctx context.Context, port int, domain string, grace time.Duration
 	s := &Server{
 		ctx:      ctx,
 		listener: listener,
-		logger:   logger,
-		onAccept: func(context.Context, net.Conn) {},
+		Logger:   logger,
+		OnAccept: func(context.Context, net.Conn) {},
 	}
 
 	go func() {
 		<-ctx.Done()
-		s.logger.With(slog.Int("port", port)).InfoContext(ctx, "stop listening")
+		s.Logger.With(slog.Int("port", port)).InfoContext(ctx, "stop listening")
 		s.gracefulStop(grace)
 	}()
 
@@ -52,18 +52,18 @@ func NewServer(ctx context.Context, port int, domain string, grace time.Duration
 
 func (s *Server) gracefulStop(grace time.Duration) {
 	if err := s.listener.Close(); err != nil {
-		s.logger.With("error", err).ErrorContext(s.ctx, "closing error")
+		s.Logger.With("error", err).ErrorContext(s.ctx, "closing error")
 	}
 
 	if s.waitAllDone(grace) == true {
 		return
 	}
 
-	s.logger.WarnContext(s.ctx, "force closing remaining connections")
+	s.Logger.WarnContext(s.ctx, "force closing remaining connections")
 
 	s.connections.Range(func(key, value any) bool {
 		if err := value.(net.Conn).Close(); err != nil {
-			s.logger.With("error", err).ErrorContext(s.ctx, "connection closing error")
+			s.Logger.With("error", err).ErrorContext(s.ctx, "connection closing error")
 		}
 		return true
 	})
@@ -77,7 +77,7 @@ func (s *Server) waitAllDone(grace time.Duration) bool {
 	case <-done:
 		return true
 	case <-time.After(grace):
-		s.logger.With(slog.Duration("period", grace)).WarnContext(s.ctx, "grace expired")
+		s.Logger.With(slog.Duration("period", grace)).WarnContext(s.ctx, "grace expired")
 		return false
 	}
 }
@@ -109,7 +109,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	s.connections.Store(conn, conn)
 	go func() {
 		defer s.wg.Done()
-		s.onAccept(s.ctx, conn)
+		s.OnAccept(s.ctx, conn)
 		s.connections.Delete(conn)
 	}()
 }

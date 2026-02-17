@@ -23,7 +23,7 @@ type masterRunner struct {
 	artemisCmd     *exec.Cmd
 	artemisStarted chan struct{}
 
-	artemisListener   ArtemisListener
+	artemisListener   leto.ArtemisListener
 	hermesBroadcaster HermesBroadcaster
 	fileWriter        HermesFileWriter
 	video             VideoTask
@@ -78,7 +78,7 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 
 func (r *masterRunner) SetUp() error {
 	var err error
-	r.artemisListener, err = NewArtemisListener(r.otherCtx, r.env.Leto.ArtemisIncomingPort)
+	r.artemisListener, err = leto.NewArtemisListener(r.otherCtx, r.env.Leto.ArtemisIncomingPort)
 	if err != nil {
 		return err
 	}
@@ -214,19 +214,19 @@ func (r *masterRunner) startSubtasks() {
 	}, "local-tracker")
 }
 
-func (r *masterRunner) startSubtask(t Task, name string) {
-	s := Start(t)
+func (r *masterRunner) startSubtask(t leto.Task, name string) {
+	s := leto.StartTask(t)
 	r.subtasks[name] = s
 }
 
 func (r *masterRunner) startSubtaskFunction(f func() error, name string) {
-	s := StartFunc(f)
+	s := leto.StartTaskFunc(f)
 	r.subtasks[name] = s
 }
 
 func (r *masterRunner) mergeFrames() func() error {
 	return func() error {
-		return MergeFrameReadout(r.otherCtx, r.env.Balancing, r.artemisListener.Outbound(), r.dispatcher.Incoming())
+		return leto.MergeFrameReadout(r.otherCtx, r.env.Balancing, r.artemisListener.Outbound(), r.dispatcher.Incoming())
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/atuleu/go-humanize"
+	"github.com/formicidae-tracker/leto/internal/leto"
 	olympuspb "github.com/formicidae-tracker/olympus/pkg/api"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -31,7 +32,7 @@ func getDiskSize(path string) (free int64, total int64, err error) {
 }
 
 type DiskWatcher interface {
-	Task
+	leto.Task
 }
 
 type diskWatcher struct {
@@ -53,9 +54,9 @@ func NewDiskWatcher(ctx context.Context, env *TrackingEnvironment, olympus Olymp
 	}
 	res.counter.Store(0)
 
-	otel.Meter(instrumentationName).
+	otel.Meter(leto.InstrumentationName).
 		Int64ObservableUpDownCounter(path.Join("leto", "diskUsage"),
-			metric.WithInt64Callback(BuildAtomicInt64Callback(&res.counter)),
+			metric.WithInt64Callback(leto.BuildAtomicInt64Callback(&res.counter)),
 		)
 
 	return res

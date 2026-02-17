@@ -1,4 +1,4 @@
-package main
+package leto
 
 import (
 	"context"
@@ -142,12 +142,14 @@ func BuildAtomicInt64Callback(v *atomic.Int64) metric.Int64Callback {
 	}
 }
 
+var InstrumentationName string = "github.com/formicidae-tracker/leto/cmd/leto"
+
 func MergeFrameReadout(ctx context.Context, wb *WorkloadBalance, inbound <-chan *hermes.FrameReadout, outbound chan<- *hermes.FrameReadout) error {
 	defer close(outbound)
 	logger := tm.NewLogger("frame-merger")
 
 	var frameTracked, frameTimeouted, frameDropped atomic.Int64
-	meter := otel.Meter(instrumentationName)
+	meter := otel.Meter(InstrumentationName)
 	counters := map[string]*atomic.Int64{
 		"frameTracked":   &frameTracked,
 		"frameTimeouted": &frameTimeouted,

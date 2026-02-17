@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
+	"github.com/formicidae-tracker/leto/internal/leto"
 	. "gopkg.in/check.v1"
 )
 
@@ -24,7 +25,7 @@ func (s *HermesBroadcasterSuite) SetUpTest(c *C) {
 	s.broadcaster, err = NewHermesBroadcaster(ctx, 12345, 30*time.Millisecond)
 	c.Assert(err, IsNil)
 
-	s.err = Start(s.broadcaster)
+	s.err = leto.StartTask(s.broadcaster)
 }
 
 func (s *HermesBroadcasterSuite) TearDownTest(c *C) {

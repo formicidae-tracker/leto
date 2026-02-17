@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
+	"github.com/formicidae-tracker/leto/internal/leto"
 	. "gopkg.in/check.v1"
 )
 
@@ -35,7 +36,7 @@ func (s *FileWriterSuite) SetUpTest(c *C) {
 	s.writer, err = NewFrameReadoutWriter(context.Background(), filepath.Join(s.basedir, c.TestName()+".hermes"))
 	c.Assert(err, IsNil)
 	s.writer.(*hermesFileWriter).period = 5 * time.Millisecond
-	s.err = Start(s.writer)
+	s.err = leto.StartTask(s.writer)
 }
 
 func (s *FileWriterSuite) TestNothingHappenWouldClose(c *C) {

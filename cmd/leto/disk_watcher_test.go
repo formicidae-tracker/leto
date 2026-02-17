@@ -72,7 +72,7 @@ func (s *DiskWatcherSuite) TestWatcherFailsWhenLimitExceed(c *C) {
 	timeout := 300 * time.Millisecond
 	s.env.DiskLimit = s.env.Rate.freeStartBytes + 1000*1024
 	s.watcher.olympus = nil
-	errs := Start(s.watcher)
+	errs := leto.StartTask(s.watcher)
 	select {
 	case err := <-errs:
 		c.Check(err, ErrorMatches, "unsufficient disk space: available: .* minimum: .*")
@@ -130,7 +130,7 @@ func (s *DiskWatcherSuite) TestWatcherDoNotAlarmIfFarFromLimits(c *C) {
 
 	ioutil.WriteFile(filepath.Join(s.Dir, c.TestName()), make([]byte, filesize), 0644)
 	s.env.DiskLimit = computeDiskLimit(s.env.Rate.freeStartBytes, humanize.Day)
-	errs := Start(s.watcher)
+	errs := leto.StartTask(s.watcher)
 	<-sync
 	s.cancel()
 	err, ok := <-errs

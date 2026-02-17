@@ -44,14 +44,12 @@ type Leto struct {
 	meter  metric.Meter
 }
 
-var instrumentationName string = "github.com/formicidae-tracker/leto/cmd/leto"
-
 func NewLeto(config leto.Config) (*Leto, error) {
 	l := &Leto{
 		leto:   config,
 		node:   GetNodeConfiguration(),
 		logger: tm.NewLogger("leto"),
-		tracer: otel.Tracer(instrumentationName),
+		tracer: otel.Tracer(leto.InstrumentationName),
 	}
 	l.runnerCond = sync.NewCond(&l.mx)
 
@@ -71,7 +69,7 @@ func NewLeto(config leto.Config) (*Leto, error) {
 }
 
 func (l *Leto) reportLoadAverage() {
-	otel.Meter(instrumentationName).Float64ObservableGauge(
+	otel.Meter(leto.InstrumentationName).Float64ObservableGauge(
 		path.Join("leto", "loadAverage"),
 		metric.WithFloat64Callback(func(ctx context.Context, obs metric.Float64Observer) error {
 			content, err := os.ReadFile("/proc/loadavg")

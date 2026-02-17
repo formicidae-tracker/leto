@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
+	"github.com/formicidae-tracker/leto/internal/leto"
 	. "gopkg.in/check.v1"
 )
 
@@ -20,7 +21,7 @@ func (s *FrameDispatcherSuite) SetUpTest(c *C) {
 	s.out1 = make(chan *hermes.FrameReadout, 1)
 	s.out2 = make(chan *hermes.FrameReadout, 1)
 	s.dispatcher = NewFrameDispatcher(s.out1, s.out2)
-	s.err = Start(s.dispatcher)
+	s.err = leto.StartTask(s.dispatcher)
 }
 
 func (s *FrameDispatcherSuite) TearDownTest(c *C) {

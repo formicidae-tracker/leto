@@ -4,10 +4,11 @@ import (
 	"fmt"
 
 	"github.com/formicidae-tracker/hermes/src/go/hermes"
+	"github.com/formicidae-tracker/leto/internal/leto"
 )
 
 type FrameDispatcher interface {
-	Task
+	leto.Task
 	Incoming() chan<- *hermes.FrameReadout
 }
 

@@ -31,7 +31,7 @@ var artemisCommandName = "artemis"
 type TrackingEnvironment struct {
 	Node          NodeConfiguration
 	Config        *leto.TrackingConfiguration
-	Balancing     *WorkloadBalance
+	Balancing     *leto.WorkloadBalance
 	TestMode      bool
 	ExperimentDir string
 	DiskLimit     int64
@@ -136,8 +136,8 @@ func fetchCameraResolution(stubPaths *[]string) (int, int, error) {
 
 }
 
-func newWorkloadBalance(lb *leto.LoadBalancing, FPS float64) *WorkloadBalance {
-	wb := &WorkloadBalance{
+func newWorkloadBalance(lb *leto.LoadBalancing, FPS float64) *leto.WorkloadBalance {
+	wb := &leto.WorkloadBalance{
 		FPS:        FPS,
 		MasterUUID: lb.UUIDs["localhost"],
 		Stride:     len(lb.Assignements),
