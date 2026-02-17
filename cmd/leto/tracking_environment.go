@@ -434,7 +434,16 @@ func (e *TrackingEnvironment) saveLocalConfig() error {
 }
 
 func (e *TrackingEnvironment) buildArtemisCommand() (*exec.Cmd, error) {
-	cmd := exec.Command(artemisCommandName, e.TrackingCommandArgs()...)
+	fullPath := artemisCommandName
+	if fullPath == "artemis" {
+		var err error
+		fullPath, err = exec.LookPath("artemis")
+		if err != nil {
+			return nil, fmt.Errorf("could not lookup artemis executable: %w", err)
+		}
+	}
+
+	cmd := exec.Command(fullPath, e.TrackingCommandArgs()...)
 	err := e.saveArtemisCommand(cmd)
 	if err != nil {
 		return nil, err
