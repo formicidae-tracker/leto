@@ -1,4 +1,4 @@
-all: leto pkg/letopb cmd/leto/leto cmd/leto-cli/leto-cli check
+all: leto pkg/letopb cmd/leto/leto cmd/leto-cli/leto-cli check tools/artemis-frame-merger/artemis-frame-merger
 
 generate:
 	make -C cmd/leto generate
@@ -23,4 +23,7 @@ clean:
 	make -C cmd/leto clean
 	make -C cmd/leto-cli clean
 
-.PHONY: clean leto check cmd/leto/leto cmd/leto-cli/leto-cli
+tools/artemis-frame-merger/artemis-frame-merger:
+	make -C tools/artemis-frame-merger
+
+.PHONY: clean leto check cmd/leto/leto cmd/leto-cli/leto-cli tools/artemis-frame-merger/artemis-frame-merger
