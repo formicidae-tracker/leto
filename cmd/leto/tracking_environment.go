@@ -444,6 +444,7 @@ func (e *TrackingEnvironment) buildArtemisCommand() (*exec.Cmd, error) {
 	}
 
 	cmd := exec.Command(fullPath, e.TrackingCommandArgs()...)
+	cmd.Dir = e.ExperimentDir
 	err := e.saveArtemisCommand(cmd)
 	if err != nil {
 		return nil, err
