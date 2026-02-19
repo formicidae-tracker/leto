@@ -146,7 +146,12 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 		// if another critical task or env.Context we need to signal
 		// artemis. artemis may have crashed but then the signal will
 		// simply be lost.
-		r.artemisCmd.Process.Signal(os.Interrupt)
+		process := r.artemisCmd.Process
+		if process == nil {
+			r.logger.Warn("artemis did not start?")
+		} else {
+			process.Signal(os.Interrupt)
+		}
 
 		// if already terminated, will do nothing (artemis crashed before signal).
 		for !WaitDoneOrFunc(r.otherCtx.Done(), r.killingGrace, func(grace time.Duration) {
@@ -154,7 +159,12 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 				slog.Duration("grace", grace),
 			).WarnContext(r.env.Context, "killing artemis as it did not terminate after %s")
 			r.cancelOthers() // to avoid to mark X timeout while we wait for termination
-			if err := r.artemisCmd.Process.Kill(); err != nil {
+			process := r.artemisCmd.Process
+			if process == nil {
+				r.logger.Warn("artemis did not start?")
+				return
+			}
+			if err := process.Kill(); err != nil {
 				r.logger.With("error", err).ErrorContext(r.env.Context, "could not kill artemis")
 			}
 		}) {
@@ -206,6 +216,7 @@ func (r *masterRunner) startSubtasks() {
 		// signal, we have to process in two step and signal that the
 		// Process is started.
 		if err := r.artemisCmd.Start(); err != nil {
+			r.logger.Error("could not start artemis", slog.String("error", err.Error()))
 			close(r.artemisStarted)
 			return err
 		}

@@ -2,6 +2,7 @@ package leto
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"reflect"
@@ -301,11 +302,15 @@ func LoadDefaultConfig() *TrackingConfiguration {
 	res := RecommendedTrackingConfiguration()
 	systemConfig, err := ReadConfiguration("/etc/default/leto.yml")
 	if err != nil {
+		slog.Warn("could not read default configuration",
+			slog.String("error", err.Error()))
 		return &res
 	}
 
 	err = res.Merge(systemConfig)
 	if err != nil {
+		slog.Warn("could not merge systemConfig",
+			slog.String("error", err.Error()))
 		res = RecommendedTrackingConfiguration()
 	}
 

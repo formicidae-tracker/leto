@@ -11,7 +11,7 @@ option(s):
   --at-quad-sigma           : Apply a gaussian filter for quad detection, noisy image likes a slight filter like 0.8, for ant detection, 0.0 is almost always fine (default: 0)
   --at-refine-edges         : Refines the edge of the quad, especially needed if decimation is used.
   --camera-fps              : Camera FPS to use (default: 8)
-  --camera-slave-height     : Camera Height argument for slave mode (default: 4607179945012099046)
+  --camera-slave-height     : Camera Height argument for slave mode (default: 1088421888)
   --camera-slave-width      : Camera Width argument for slave mode (default: 0)
   --camera-strobe           : Camera Strobe duration (default: '1.5ms')
   --camera-strobe-delay     : Camera Strobe delay (default: '0s')

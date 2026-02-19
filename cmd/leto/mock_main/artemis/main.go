@@ -47,9 +47,11 @@ type Options_0_5 struct {
 	} `group:"leto" namespace:"leto"`
 
 	VideoOutput struct {
-		Height       int    `long:"height"`
-		StreamHeight int    `long:"stream-height"`
-		Host         string `long:"host"`
+		Height int `long:"height"`
+		Stream struct {
+			Height  int    `long:"height"`
+			Address string `long:"address"`
+		} `group:"stream" namespace:"stream"`
 	} `group:"video-output" namespace:"video-output"`
 
 	Process struct {

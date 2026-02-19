@@ -42,7 +42,7 @@ type TrackingEnvironment struct {
 }
 
 func NewExperimentConfiguration(ctx context.Context, leto leto.Config, node NodeConfiguration, user *leto.TrackingConfiguration) (*TrackingEnvironment, error) {
-	tracking, err := finalizeTracking(user, node)
+	tracking, err := finalizeTrackingConfiguration(user, node)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func NewExperimentConfiguration(ctx context.Context, leto leto.Config, node Node
 	return res, nil
 }
 
-func finalizeTracking(user *leto.TrackingConfiguration, node NodeConfiguration) (*leto.TrackingConfiguration, error) {
+func finalizeTrackingConfiguration(user *leto.TrackingConfiguration, node NodeConfiguration) (*leto.TrackingConfiguration, error) {
 	tracking := leto.LoadDefaultConfig()
 	if err := tracking.Merge(user); err != nil {
 		return nil, fmt.Errorf("could not merge tracking configuration: %w", err)
@@ -253,7 +253,7 @@ func (e *TrackingEnvironment) trackingCommandArgs_0_5() []string {
 	}
 
 	if e.Node.IsMaster() == true {
-		args = append(args, "--video-output.host="+*e.Config.Video.Host)
+		args = append(args, "--video-output.stream.address="+*e.Config.Video.Host)
 		args = append(args, "--video-output.dir="+e.ExperimentDir)
 		args = append(args, fmt.Sprintf("--video-output.height=%d", *e.Config.Video.Height))
 		args = append(args, fmt.Sprintf("--video-output.bitrate=%d", *e.Config.Video.BitRateKB))
@@ -262,8 +262,8 @@ func (e *TrackingEnvironment) trackingCommandArgs_0_5() []string {
 			args = append(args, "--video-output.no-timestamp-overlay")
 		}
 		args = append(args, fmt.Sprintf("--video-output.file-max-size-time=%s", *e.Config.NewAntRenewPeriod))
-		args = append(args, fmt.Sprintf("--video-output.stream-height=%d", *e.Config.Video.StreamHeight))
-		args = append(args, fmt.Sprintf("--video-output.stream-bitrate=%d", *e.Config.Video.StreamBitrateKB))
+		args = append(args, fmt.Sprintf("--video-output.stream.height=%d", *e.Config.Video.StreamHeight))
+		args = append(args, fmt.Sprintf("--video-output.stream.bitrate=%d", *e.Config.Video.StreamBitrateKB))
 
 		args = append(args, "--close-up-dir="+e.newCloseUpPath(),
 			fmt.Sprintf("--close-up-size=%d", *e.Config.NewAntOutputROISize),

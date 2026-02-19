@@ -9,7 +9,7 @@ check: mock_main/artemis/artemis mock_main/ffmpeg/ffmpeg mock_main/coaxlink-firm
 	go vet
 
 artemis_help_v%.txt: FORCE
-	docker run ghcr.io/formicidae-tracker/artemis:$* artemis --help 2> $@
+	docker run --rm ghcr.io/formicidae-tracker/artemis:$* artemis --help 2> $@
 
 generate: artemis_help_v0.4.5.txt artemis_help_v0.5.0-rc1.txt
 

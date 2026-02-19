@@ -30,16 +30,21 @@ func checkFFMpeg() bool {
 }
 
 func (s *LetoSuite) setArtemis(version leto.AVersion) {
+	dir, err := os.Getwd()
+	if err != nil {
+		panic(fmt.Sprintf("could not find current working dir %s", err))
+	}
+
 	switch version {
 	case leto.ARTEMIS_UNSUPPORTED:
 		os.Setenv("MOCK_ARTEMIS_VERSION", "")
 		artemisCommandName = "artemis"
 	case leto.ARTEMIS_0_4:
 		os.Setenv("MOCK_ARTEMIS_VERSION", "0.4")
-		artemisCommandName = "./mock_main/artemis/artemis"
+		artemisCommandName = filepath.Join(dir, "mock_main/artemis/artemis")
 	case leto.ARTEMIS_0_5:
 		os.Setenv("MOCK_ARTEMIS_VERSION", "0.5")
-		artemisCommandName = "./mock_main/artemis/artemis"
+		artemisCommandName = filepath.Join(dir, "mock_main/artemis/artemis")
 	}
 }
 

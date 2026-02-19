@@ -86,6 +86,10 @@ func NewHermesBroadcaster(ctx context.Context, port int, idle time.Duration) (He
 func (h *hermesBroadcaster) registerNew() (int, <-chan []byte) {
 	h.mx.Lock()
 	defer h.mx.Unlock()
+	if h.outgoing == nil {
+		return 0, nil
+	}
+
 	id := h.nextId
 	h.nextId += 1
 
