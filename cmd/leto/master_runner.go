@@ -63,7 +63,7 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		cancelOthers:       cancelOther,
 		logger:             tm.NewLogger("runner"),
 		artemisStarted:     make(chan struct{}),
-		killingGrace:       500 * time.Millisecond,
+		killingGrace:       1500 * time.Millisecond,
 	}
 	if env.Config.Camera.FPS != nil {
 		res.killingGrace = max(res.killingGrace, time.Duration(2.0*time.Second.Seconds() / *env.Config.Camera.FPS)*time.Second)
