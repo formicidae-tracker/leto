@@ -30,8 +30,8 @@ type masterRunner struct {
 	dispatcher        FrameDispatcher
 	olympus           OlympusTask
 
-	trackerCtx, otherCtx             context.Context
-	cancelLocalTracker, cancelOthers context.CancelFunc
+	trackerCtx, olympusCtx, otherCtx                context.Context
+	cancelLocalTracker, cancelOlympus, cancelOthers context.CancelFunc
 
 	killingGrace time.Duration
 
@@ -44,6 +44,7 @@ type masterRunner struct {
 func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 	trackerCtx, cancelTracker := context.WithCancel(env.Context)
 
+	olympusCtx, cancelOlympus := context.WithCancel(context.Background())
 	otherCtx, cancelOther := context.WithCancel(context.Background())
 
 	// inject potential spanContext in otherCtx
@@ -55,8 +56,10 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		env:                env,
 		subtasks:           make(map[string]<-chan error),
 		trackerCtx:         trackerCtx,
+		olympusCtx:         olympusCtx,
 		otherCtx:           otherCtx,
 		cancelLocalTracker: cancelTracker,
+		cancelOlympus:      cancelOlympus,
 		cancelOthers:       cancelOther,
 		logger:             tm.NewLogger("runner"),
 		artemisStarted:     make(chan struct{}),
@@ -119,7 +122,7 @@ func (r *masterRunner) SetUp() error {
 		r.artemisCmd.Stdout = r.artemisOut
 	}
 
-	r.olympus, err = NewOlympusTask(r.otherCtx, r.env)
+	r.olympus, err = NewOlympusTask(r.olympusCtx, r.env)
 	if err != nil {
 		r.logger.With("error", err).ErrorContext(r.env.Context, "will not register to olympus")
 	}
@@ -172,17 +175,33 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 	}()
 
 	werr := r.waitAnyCriticalSubtask()
-	errs = append(errs, werr)
-	if r.olympus != nil && werr != nil {
-		r.olympus.Fatal(werr)
+	if werr == nil {
+		r.logger.Info("artemis exited gracefully")
+	} else {
+		r.logger.Warn("critical subtask issue",
+			slog.String("error", werr.Error()))
 	}
+	errs = append(errs, werr)
 
 	r.stopLocalTracker()
 	lerr := r.waitForLocalTracker()
-	errs = append(errs, lerr)
-	if r.olympus != nil && lerr != nil {
-		r.olympus.Fatal(lerr)
+	if lerr == nil {
+		r.logger.Info("artemis exited gracefully")
+	} else {
+		r.logger.Warn("artemis exited with error",
+			slog.String("error", lerr.Error()))
 	}
+
+	errs = append(errs, lerr)
+
+	//only fatal once
+	ferr := errors.Join(werr, lerr)
+	if r.olympus != nil && ferr != nil {
+		r.olympus.Fatal(ferr)
+	}
+
+	// from now on, no more Fatal call, and it won't do anything if Fatal was called.
+	r.cancelOlympus()
 
 	r.stopAllOtherSubtasks()
 	r.waitAllSubtasks()
