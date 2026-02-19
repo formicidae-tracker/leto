@@ -14,7 +14,7 @@ type NodeConfiguration struct {
 }
 
 func localConfigPath() (string, error) {
-	return xdg.ConfigFile("FORmicidae Tracker/leto.yml")
+	return xdg.ConfigFile("io.github.formicidae_tracker/leto/node.yml")
 }
 
 var defaultNodeConfiguration NodeConfiguration = NodeConfiguration{

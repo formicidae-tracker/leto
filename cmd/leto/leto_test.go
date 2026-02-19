@@ -80,7 +80,7 @@ func (s *LetoSuite) TearDownSuite(c *C) {
 func (s *LetoSuite) setUpTest(c *C, version leto.AVersion) bool {
 	s.setArtemis(version)
 	var err error
-	s.l, err = NewLeto(leto.DefaultConfig)
+	s.l, err = NewLeto(leto.DefaultConfig())
 	return c.Check(err, IsNil) && c.Check(s.l, Not(IsNil))
 }
 
@@ -101,7 +101,7 @@ func (s *LetoSuite) TestAlreadyStopped(c *C) {
 
 // connects to the boradcaster and wait for n frame to be received
 func (s *LetoSuite) waitFrames(n int) error {
-	conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", leto.DefaultConfig.HermesBroadcastPort))
+	conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", leto.DefaultConfig().HermesBroadcastPort))
 
 	if err != nil {
 		return err

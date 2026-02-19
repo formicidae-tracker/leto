@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 
 	"github.com/formicidae-tracker/leto/internal/leto"
 	"github.com/formicidae-tracker/olympus/pkg/api"
@@ -37,19 +38,29 @@ type olympusTask struct {
 	logger   *slog.Logger
 }
 
+var targetRx = regexp.MustCompile("rtsp://([^/:]+)(:[0-9]+)?")
+
 func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, err
 	}
-	target := env.Config.Video.Host
-	if target == nil || len(*target) == 0 {
-		return nil, errors.New("no olympus host in configuration")
+
+	//target := env.leto.
+	if len(env.Leto.OlympusAddress) == 0 {
+		return nil, errors.New("no olympus address in node configuration")
+	}
+	target := ""
+	if env.Config.Video.Host != nil {
+		m := targetRx.FindStringSubmatch(*env.Config.Video.Host)
+		if len(m) >= 2 {
+			target = m[1]
+		}
 	}
 
 	declaration := &olympuspb.TrackingDeclaration{
 		Hostname:       hostname,
-		StreamServer:   *target,
+		StreamServer:   target,
 		ExperimentName: env.Config.ExperimentName,
 		Since:          timestamppb.New(env.Start),
 	}
@@ -62,12 +73,10 @@ func NewOlympusTask(ctx context.Context, env *TrackingEnvironment) (OlympusTask,
 		)
 	}
 
-	address := fmt.Sprintf("%s:%d", *target, env.Leto.OlympusPort)
-
 	res := &olympusTask{
 		ctx: ctx,
 		ClientTask: olympuspb.NewTrackingTask(
-			ctx, address, declaration, api.WithDialOptions(options...)),
+			ctx, env.Leto.OlympusAddress, declaration, api.WithDialOptions(options...)),
 		incoming: incoming,
 		logger:   tm.NewLogger("olympus-registration"),
 	}

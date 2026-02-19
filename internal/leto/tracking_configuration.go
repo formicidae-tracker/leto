@@ -2,12 +2,12 @@ package leto
 
 import (
 	"fmt"
-	"log/slog"
 	"math"
 	"os"
 	"reflect"
 	"time"
 
+	"github.com/adrg/xdg"
 	"gopkg.in/yaml.v2"
 )
 
@@ -300,17 +300,18 @@ func (c *TrackingConfiguration) WriteConfiguration(filename string) error {
 
 func LoadDefaultConfig() *TrackingConfiguration {
 	res := RecommendedTrackingConfiguration()
-	systemConfig, err := ReadConfiguration("/etc/default/leto.yml")
+	configPath, err := xdg.ConfigFile("io.github.formicidae_tracker/leto/tracking.yml")
 	if err != nil {
-		slog.Warn("could not read default configuration",
-			slog.String("error", err.Error()))
+		return &res
+	}
+
+	systemConfig, err := ReadConfiguration(configPath)
+	if err != nil {
 		return &res
 	}
 
 	err = res.Merge(systemConfig)
 	if err != nil {
-		slog.Warn("could not merge systemConfig",
-			slog.String("error", err.Error()))
 		res = RecommendedTrackingConfiguration()
 	}
 

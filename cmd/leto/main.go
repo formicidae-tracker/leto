@@ -26,7 +26,7 @@ type Options struct {
 }
 
 func (o *Options) LetoConfig() leto.Config {
-	res := leto.DefaultConfig
+	res := leto.DefaultConfig()
 	if o.RPCPort != nil {
 		res.LetoPort = *o.RPCPort
 	}

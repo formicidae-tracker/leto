@@ -39,7 +39,7 @@ func (s *DiskWatcherSuite) SetUpTest(c *C) {
 	s.olympus = mock_main.NewMockOlympusTask(s.ctrl)
 	s.env = &TrackingEnvironment{
 		ExperimentDir: s.Dir,
-		Leto:          leto.DefaultConfig,
+		Leto:          leto.DefaultConfig(),
 	}
 
 	free, _, err := getDiskSize(s.Dir)

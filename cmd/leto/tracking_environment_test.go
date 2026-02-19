@@ -74,7 +74,7 @@ func (s *TrackingEnvironmentSuite) TestArtemisArguments(c *C) {
 func (s *TrackingEnvironmentSuite) SetUpSuite(c *C) {
 	var err error
 
-	s.env, err = NewExperimentConfiguration(context.Background(), leto.DefaultConfig, defaultNodeConfiguration, leto.LoadDefaultConfig())
+	s.env, err = NewExperimentConfiguration(context.Background(), leto.DefaultConfig(), defaultNodeConfiguration, leto.LoadDefaultConfig())
 	c.Assert(err, IsNil)
 	s.versions = map[leto.AVersion]*allowedArguments{}
 	err = filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
