@@ -30,8 +30,8 @@ type masterRunner struct {
 	dispatcher        FrameDispatcher
 	olympus           OlympusTask
 
-	trackerCtx, otherCtx             context.Context
-	cancelLocalTracker, cancelOthers context.CancelFunc
+	trackerCtx, olympusCtx, otherCtx                context.Context
+	cancelLocalTracker, cancelOlympus, cancelOthers context.CancelFunc
 
 	artemisOut, videoIn *os.File
 
@@ -40,8 +40,9 @@ type masterRunner struct {
 }
 
 func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
-	trackerCtx, cancelTracker := context.WithCancel(env.Context)
+	trackerCtx, cancelLocalTracker := context.WithCancel(env.Context)
 
+	olympusCtx, cancelOlympus := context.WithCancel(context.Background())
 	otherCtx, cancelOther := context.WithCancel(context.Background())
 
 	// inject potential spanContext in otherCtx
@@ -53,8 +54,10 @@ func newMasterRunner(env *TrackingEnvironment) (ExperimentRunner, error) {
 		env:                env,
 		subtasks:           make(map[string]<-chan error),
 		trackerCtx:         trackerCtx,
+		olympusCtx:         olympusCtx,
 		otherCtx:           otherCtx,
-		cancelLocalTracker: cancelTracker,
+		cancelLocalTracker: cancelLocalTracker,
+		cancelOlympus:      cancelOlympus,
 		cancelOthers:       cancelOther,
 		logger:             tm.NewLogger("runner").WithContext(env.Context),
 		artemisStarted:     make(chan struct{}),
@@ -131,13 +134,24 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 		// if another critical task or env.Context we need to signal
 		// artemis. artemis may have crashed but then the signal will
 		// simply be lost.
-		r.artemisCmd.Process.Signal(os.Interrupt)
+		process := r.artemisCmd.Process
+		if process == nil {
+			r.logger.Error("artemis was not started")
+		} else {
+			process.Signal(os.Interrupt)
+		}
 
 		// if already terminated, will do nothing (artemis crashed before signal).
-		for !WaitDoneOrFunc(r.otherCtx.Done(), 500*time.Millisecond, func(grace time.Duration) {
+		for !WaitDoneOrFunc(r.otherCtx.Done(), 900*time.Millisecond, func(grace time.Duration) {
 			r.logger.Warnf("killing artemis as it did not terminate after %s", grace)
 			r.cancelOthers() // to avoid to mark X timeout while we wait for termination
-			if err := r.artemisCmd.Process.Kill(); err != nil {
+
+			process := r.artemisCmd.Process
+			if process == nil {
+				r.logger.Error("artemis was not started")
+				return
+			}
+			if err := process.Kill(); err != nil {
 				r.logger.WithError(err).Error("could not kill artemis")
 			}
 		}) {
@@ -146,16 +160,15 @@ func (r *masterRunner) Run() (log *letopb.ExperimentLog, err error) {
 
 	werr := r.waitAnyCriticalSubtask()
 	errs = append(errs, werr)
-	if r.olympus != nil && werr != nil {
-		r.olympus.Fatal(werr)
-	}
 
 	r.stopLocalTracker()
 	lerr := r.waitForLocalTracker()
 	errs = append(errs, lerr)
-	if r.olympus != nil && lerr != nil {
-		r.olympus.Fatal(lerr)
+
+	if ferr := errors.Join(werr, lerr); ferr != nil && r.olympus != nil {
+		r.olympus.Fatal(ferr)
 	}
+	r.cancelOlympus()
 
 	r.stopAllOtherSubtasks()
 	r.waitAllSubtasks()
